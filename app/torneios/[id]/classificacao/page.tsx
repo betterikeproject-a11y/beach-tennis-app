@@ -11,111 +11,150 @@ import { toast } from "sonner";
 import type { Player, Group, GroupMatch } from "@/lib/types/database";
 import type { PlayerStanding } from "@/lib/domain/standings";
 
+type PairEntry = {
+  p1: PlayerStanding & { groupNumber: number };
+  p2: PlayerStanding & { groupNumber: number };
+};
+
+function ordinal(n: number) {
+  return `${n}º`;
+}
+
 export default function ClassificacaoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
 
-  const [overall, setOverall] = useState<PlayerStanding[]>([]);
+  const [allOverall, setAllOverall] = useState<(PlayerStanding & { groupNumber: number })[]>([]);
   const [numClassifica, setNumClassifica] = useState(3);
+  const [pairs, setPairs] = useState<PairEntry[]>([]);
+  const [swapTarget, setSwapTarget] = useState<{ pairIdx: number; slot: 0 | 1 } | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [swapMode, setSwapMode] = useState<number | null>(null); // pair index being swapped
 
+  // Load all data and build full standings
   useEffect(() => {
     async function load() {
       const [{ data: groups }, { data: members }, { data: matches }, { data: players }] = await Promise.all([
-        supabase.from("groups").select("*").eq("tournament_id", id),
+        supabase.from("groups").select("*").eq("tournament_id", id).order("group_number"),
         supabase.from("group_members").select("*"),
         supabase.from("group_matches").select("*"),
         supabase.from("players").select("*").eq("tournament_id", id),
       ]);
 
-      const perGroup = (groups ?? []).map((g: Group) => {
+      const groupRows = groups ?? [];
+      const allPlayers = players ?? [];
+
+      // Build per-group standings and track group numbers
+      const perGroupStandings = groupRows.map((g: Group) => {
         const memberIds = (members ?? []).filter((m) => m.group_id === g.id).map((m) => m.player_id);
-        const gPlayers = (players ?? []).filter((p: Player) => memberIds.includes(p.id));
-        const gMatches = (matches ?? []).filter((m: GroupMatch) => m.group_id === g.id);
-        return computeGroupStandings(
-          gPlayers.map((p: Player) => ({ id: p.id, name: p.name })),
-          gMatches
-        );
-      });
-
-      setOverall(computeOverallStandings(perGroup));
-      setLoading(false);
-    }
-    load();
-  }, [id]);
-
-  // Build pairs from classified players
-  const classified = overall.filter((s) => {
-    // top N per group: each group's standings, take top numClassifica
-    // We re-derive per-group positions inline
-    return true; // for display, show overall; actual filtering is by per-group position
-  });
-
-  // Pair up by overall rank: 1+2, 3+4, 5+6, ...
-  const [pairs, setPairs] = useState<[PlayerStanding, PlayerStanding][]>([]);
-
-  useEffect(() => {
-    // Take top numClassifica per group from overall standings
-    // Re-derive: for each group position, take only players positioned <= numClassifica in their group
-    async function buildPairs() {
-      const [{ data: groups }, { data: members }, { data: matches }, { data: players }] = await Promise.all([
-        supabase.from("groups").select("*").eq("tournament_id", id),
-        supabase.from("group_members").select("*"),
-        supabase.from("group_matches").select("*"),
-        supabase.from("players").select("*").eq("tournament_id", id),
-      ]);
-
-      const perGroupClassified: PlayerStanding[][] = [];
-
-      for (const g of (groups ?? [])) {
-        const memberIds = (members ?? []).filter((m: { group_id: string }) => m.group_id === g.id).map((m: { player_id: string }) => m.player_id);
-        const gPlayers = (players ?? []).filter((p: Player) => memberIds.includes(p.id));
+        const gPlayers = allPlayers.filter((p: Player) => memberIds.includes(p.id));
         const gMatches = (matches ?? []).filter((m: GroupMatch) => m.group_id === g.id);
         const standings = computeGroupStandings(
           gPlayers.map((p: Player) => ({ id: p.id, name: p.name })),
           gMatches
         );
-        perGroupClassified.push(standings.filter((s) => s.position <= numClassifica));
-      }
+        return standings.map((s) => ({ ...s, groupNumber: g.group_number }));
+      });
 
-      const overall = computeOverallStandings(perGroupClassified);
-      // Pair: 1+2, 3+4, ...
-      const newPairs: [PlayerStanding, PlayerStanding][] = [];
-      for (let i = 0; i + 1 < overall.length; i += 2) {
-        newPairs.push([overall[i], overall[i + 1]]);
-      }
-      setPairs(newPairs);
+      // All players overall (for the full table)
+      const overall = computeOverallStandings(perGroupStandings).map((s, i) => ({
+        ...s,
+        groupNumber: perGroupStandings.flat().find((ps) => ps.playerId === s.playerId)?.groupNumber ?? 0,
+        position: i + 1,
+      }));
+      setAllOverall(overall);
+      setLoading(false);
     }
-    buildPairs();
-  }, [id, numClassifica]);
+    load();
+  }, [id]);
 
-  function swapPlayer(fromPairIdx: number, fromSlot: 0 | 1, toPairIdx: number, toSlot: 0 | 1) {
+  // Rebuild pairs whenever numClassifica or allOverall changes
+  useEffect(() => {
+    if (allOverall.length === 0) return;
+
+    // Group players back by their groupNumber
+    const byGroup: Record<number, typeof allOverall> = {};
+    for (const s of allOverall) {
+      byGroup[s.groupNumber] = byGroup[s.groupNumber] ?? [];
+      byGroup[s.groupNumber].push(s);
+    }
+
+    // Sort each group by their original group position (use overall position as proxy within group)
+    // Re-rank within each group by the same criteria
+    const classified: typeof allOverall = [];
+    for (const groupNum of Object.keys(byGroup).map(Number).sort()) {
+      const groupStandings = byGroup[groupNum]
+        .slice()
+        .sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.saldo !== a.saldo) return b.saldo - a.saldo;
+          if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
+          return a.playerName.localeCompare(b.playerName, "pt-BR", { sensitivity: "base" });
+        });
+      classified.push(...groupStandings.slice(0, numClassifica));
+    }
+
+    // Overall rank of classified players
+    const classifiedOverall = computeOverallStandings(
+      Object.keys(byGroup).map((gn) =>
+        byGroup[Number(gn)].slice().sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.saldo !== a.saldo) return b.saldo - a.saldo;
+          if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
+          return a.playerName.localeCompare(b.playerName, "pt-BR", { sensitivity: "base" });
+        }).slice(0, numClassifica)
+      )
+    ).map((s) => ({
+      ...s,
+      groupNumber: allOverall.find((ao) => ao.playerId === s.playerId)?.groupNumber ?? 0,
+    }));
+
+    const newPairs: PairEntry[] = [];
+    for (let i = 0; i + 1 < classifiedOverall.length; i += 2) {
+      newPairs.push({ p1: classifiedOverall[i], p2: classifiedOverall[i + 1] });
+    }
+    setPairs(newPairs);
+    setSwapTarget(null);
+  }, [allOverall, numClassifica]);
+
+  function handlePlayerClick(pairIdx: number, slot: 0 | 1) {
+    if (!swapTarget) {
+      setSwapTarget({ pairIdx, slot });
+      return;
+    }
+    if (swapTarget.pairIdx === pairIdx && swapTarget.slot === slot) {
+      setSwapTarget(null);
+      return;
+    }
+    // Perform swap
     setPairs((prev) => {
-      const next = prev.map((pair) => [...pair] as [PlayerStanding, PlayerStanding]);
-      const tmp = next[fromPairIdx][fromSlot];
-      next[fromPairIdx][fromSlot] = next[toPairIdx][toSlot];
-      next[toPairIdx][toSlot] = tmp;
+      const next = prev.map((pair) => ({ ...pair }));
+      const fromPlayer = slot === 0 ? next[swapTarget.pairIdx].p1 : next[swapTarget.pairIdx].p2;
+      const toPlayer = slot === 0 ? next[pairIdx].p1 : next[pairIdx].p2;
+
+      if (swapTarget.slot === 0) next[swapTarget.pairIdx].p1 = toPlayer;
+      else next[swapTarget.pairIdx].p2 = toPlayer;
+
+      if (slot === 0) next[pairIdx].p1 = fromPlayer;
+      else next[pairIdx].p2 = fromPlayer;
+
       return next;
     });
-    setSwapMode(null);
+    setSwapTarget(null);
   }
 
   async function generateKnockout() {
     if (pairs.length === 0) return;
     setGenerating(true);
     try {
-      // Delete existing knockout data
       await supabase.from("knockout_pairs").delete().eq("tournament_id", id);
       await supabase.from("knockout_matches").delete().eq("tournament_id", id);
 
-      // Insert pairs
       const pairRows = pairs.map((pair, i) => ({
         tournament_id: id,
         seed: i + 1,
-        player1_id: pair[0].playerId,
-        player2_id: pair[1].playerId,
+        player1_id: pair.p1.playerId,
+        player2_id: pair.p2.playerId,
       }));
       const { data: insertedPairs, error: pe } = await supabase
         .from("knockout_pairs")
@@ -123,7 +162,6 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
         .select("id, seed");
       if (pe || !insertedPairs) throw pe ?? new Error("Falha ao inserir duplas");
 
-      // Generate bracket
       const pairRefs = insertedPairs.map((p: { id: string; seed: number }) => ({ id: p.id, seed: p.seed }));
       const bracket = generateBracket(pairRefs);
       const matchRows = bracket.map((m) => ({
@@ -147,71 +185,175 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
   if (loading) return <div className="text-center py-12 text-muted-foreground">Carregando classificação…</div>;
 
   const suggestedPhase = suggestStartingPhase(pairs.length);
+  const classifiedIds = new Set(pairs.flatMap((p) => [p.p1.playerId, p.p2.playerId]));
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Classificação Geral</h1>
+      <h1 className="text-2xl font-bold">Classificação</h1>
 
+      {/* Config */}
       <Card>
-        <CardContent className="pt-4 space-y-3">
-          <label className="block text-sm font-medium">
+        <CardContent className="pt-4 flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm font-medium">
             Classificados por grupo:
             <input
               type="number"
-              min={1} max={5}
+              min={1}
+              max={5}
               value={numClassifica}
               onChange={(e) => setNumClassifica(Math.max(1, Math.min(5, parseInt(e.target.value) || 1)))}
-              className="ml-2 w-16 border rounded px-2 py-1 text-center"
+              className="w-14 border rounded px-2 py-1 text-center text-sm"
             />
           </label>
-          <p className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground">
             {pairs.length} dupla{pairs.length !== 1 ? "s" : ""} classificada{pairs.length !== 1 ? "s" : ""} →{" "}
-            {suggestedPhase ? `início nas ${suggestedPhase === "final" ? "Final" : suggestedPhase === "semis" ? "Semis" : "Quartas"}` : "número inválido"}
+            {suggestedPhase
+              ? `início nas ${suggestedPhase === "final" ? "Final" : suggestedPhase === "semis" ? "Semis" : "Quartas"}`
+              : "número inválido"}
+          </span>
+        </CardContent>
+      </Card>
+
+      {/* Full standings table */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm font-semibold">Classificação Geral — Todos os Jogadores</CardTitle>
+        </CardHeader>
+        <CardContent className="px-3 pb-3 overflow-x-auto">
+          <table className="w-full text-xs min-w-[400px]">
+            <thead>
+              <tr className="border-b text-muted-foreground">
+                <th className="text-left py-1.5 pr-1 w-6">#</th>
+                <th className="text-left py-1.5">Jogador</th>
+                <th className="text-center py-1.5 px-1 w-8">Gr.</th>
+                <th className="text-center py-1.5 px-1 w-8">V</th>
+                <th className="text-center py-1.5 px-1 w-10">G+</th>
+                <th className="text-center py-1.5 px-1 w-10">G-</th>
+                <th className="text-center py-1.5 px-1 w-12">Saldo</th>
+                <th className="text-right py-1.5 pl-1 w-10">Pts</th>
+                <th className="text-center py-1.5 pl-2 w-6"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {allOverall.map((s) => {
+                const isClassified = classifiedIds.has(s.playerId);
+                return (
+                  <tr
+                    key={s.playerId}
+                    className={`border-b last:border-0 ${isClassified ? "bg-brand-light" : ""}`}
+                  >
+                    <td className="py-1.5 pr-1 text-muted-foreground font-mono font-semibold">{s.position}</td>
+                    <td className="py-1.5 font-medium max-w-[110px] truncate">{s.playerName}</td>
+                    <td className="py-1.5 px-1 text-center text-muted-foreground">{s.groupNumber}</td>
+                    <td className="py-1.5 px-1 text-center">{s.wins}</td>
+                    <td className="py-1.5 px-1 text-center text-green-700">{s.gamesFor}</td>
+                    <td className="py-1.5 px-1 text-center text-red-500">{s.gamesAgainst}</td>
+                    <td className={`py-1.5 px-1 text-center font-medium ${s.saldo >= 0 ? "text-green-700" : "text-red-500"}`}>
+                      {s.saldo > 0 ? `+${s.saldo}` : s.saldo}
+                    </td>
+                    <td className="py-1.5 pl-1 text-right font-bold">{s.points}</td>
+                    <td className="py-1.5 pl-2 text-center">
+                      {isClassified && <span className="text-brand font-bold text-xs">✓</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Gr. = Grupo · V = Vitórias · G+ = Games ganhos · G- = Games sofridos · Pts = Pontos (3 por vitória) · ✓ = Classificado
           </p>
         </CardContent>
       </Card>
 
-      <div className="space-y-2">
-        {pairs.map((pair, i) => (
-          <Card
-            key={i}
-            className={`cursor-pointer transition-shadow ${swapMode === i ? "ring-2 ring-orange-400" : ""}`}
-            onClick={() => setSwapMode(swapMode === i ? null : i)}
-          >
-            <CardContent className="py-3 px-4 flex items-center gap-3">
-              <span className="font-mono text-lg font-bold text-orange-500 w-8">D{i + 1}</span>
-              <div className="flex-1 text-sm">
-                <span className="font-medium">{pair[0].playerName}</span>
-                <span className="text-muted-foreground"> + </span>
-                <span className="font-medium">{pair[1].playerName}</span>
-              </div>
-              {swapMode !== null && swapMode !== i && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs"
-                  onClick={(e) => { e.stopPropagation(); swapPlayer(swapMode, 0, i, 0); }}
-                >
-                  Trocar
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+      {/* Pairs */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-base">Duplas para o Chaveamento</h2>
+          {swapTarget && (
+            <button
+              onClick={() => setSwapTarget(null)}
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              Cancelar troca
+            </button>
+          )}
+        </div>
+
+        {swapTarget && (
+          <p className="text-xs text-brand font-medium text-center bg-brand-light rounded-md py-2">
+            Selecione outro jogador para trocar com{" "}
+            <strong>
+              {swapTarget.slot === 0 ? pairs[swapTarget.pairIdx].p1.playerName : pairs[swapTarget.pairIdx].p2.playerName}
+            </strong>
+          </p>
+        )}
+
+        {pairs.map((pair, i) => {
+          const players = [pair.p1, pair.p2] as const;
+          return (
+            <Card key={i} className="overflow-hidden">
+              <CardContent className="p-0">
+                <div className="flex items-center gap-0">
+                  {/* Seed badge */}
+                  <div className="bg-brand text-white flex flex-col items-center justify-center px-3 py-4 min-w-[52px] self-stretch">
+                    <span className="text-xs font-medium opacity-80">Seed</span>
+                    <span className="text-xl font-bold leading-none">#{i + 1}</span>
+                  </div>
+
+                  {/* Players */}
+                  <div className="flex-1 divide-y">
+                    {players.map((player, slot) => {
+                      const isSelected =
+                        swapTarget?.pairIdx === i && swapTarget?.slot === slot;
+                      const isSwappable = swapTarget !== null && !(swapTarget.pairIdx === i && swapTarget.slot === slot);
+                      return (
+                        <button
+                          key={player.playerId}
+                          onClick={() => handlePlayerClick(i, slot as 0 | 1)}
+                          className={`w-full text-left px-4 py-2.5 transition-colors flex items-center justify-between gap-2 ${
+                            isSelected
+                              ? "bg-brand/10 ring-1 ring-inset ring-brand"
+                              : isSwappable
+                              ? "hover:bg-yellow-50 cursor-pointer"
+                              : swapTarget
+                              ? "opacity-50"
+                              : "hover:bg-muted/50 cursor-pointer"
+                          }`}
+                        >
+                          <div>
+                            <span className="text-sm font-semibold">{player.playerName}</span>
+                            <span className="text-xs text-muted-foreground ml-2">
+                              {ordinal(player.position)} geral · Gr.{player.groupNumber} · {player.wins}V · saldo {player.saldo >= 0 ? "+" : ""}{player.saldo}
+                            </span>
+                          </div>
+                          {isSwappable && (
+                            <span className="text-xs text-brand font-semibold shrink-0">Trocar ⇄</span>
+                          )}
+                          {isSelected && (
+                            <span className="text-xs text-brand font-semibold shrink-0">Selecionado ●</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
-      {swapMode !== null && (
-        <p className="text-sm text-center text-muted-foreground">
-          Dupla D{swapMode + 1} selecionada. Toque em outra dupla para trocar.
-        </p>
-      )}
+      <p className="text-xs text-center text-muted-foreground -mt-2">
+        Toque em um jogador para selecioná-lo, depois toque em outro para realizar a troca.
+      </p>
 
       <Button
-        className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-base"
+        className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-base"
         disabled={pairs.length < 2 || !suggestedPhase || generating}
         onClick={generateKnockout}
       >
-        {generating ? "Gerando…" : "Gerar Chaveamento →"}
+        {generating ? "Gerando…" : "Confirmar e Gerar Chaveamento →"}
       </Button>
     </div>
   );

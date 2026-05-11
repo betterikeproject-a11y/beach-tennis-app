@@ -62,7 +62,7 @@ export function LeagueRanking() {
               <td className="py-2 font-medium">{r.player_display_name}</td>
               <td className="py-2 px-2 text-center text-muted-foreground">{r.total_participacoes}</td>
               <td className="py-2 px-2 text-center text-muted-foreground">{r.total_vitorias}</td>
-              <td className="py-2 pl-2 text-right font-bold text-orange-600">{r.total_pts}</td>
+              <td className="py-2 pl-2 text-right font-bold text-brand">{r.total_pts}</td>
             </tr>
           ))}
         </tbody>

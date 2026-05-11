@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import type { Tournament } from "@/lib/types/database";
 
 const STATUS_LABEL: Record<Tournament["status"], string> = {
@@ -18,7 +22,7 @@ const STATUS_LABEL: Record<Tournament["status"], string> = {
 const STATUS_COLOR: Record<Tournament["status"], string> = {
   draft: "bg-gray-100 text-gray-700",
   grupos: "bg-blue-100 text-blue-700",
-  eliminatorias: "bg-orange-100 text-orange-700",
+  eliminatorias: "bg-brand-light text-brand-hover",
   finalizado: "bg-green-100 text-green-700",
 };
 
@@ -27,6 +31,8 @@ export function TournamentList() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -40,7 +46,6 @@ export function TournamentList() {
 
       setTournaments(data ?? []);
 
-      // load player counts
       if (data && data.length > 0) {
         const { data: players } = await supabase
           .from("players")
@@ -56,6 +61,22 @@ export function TournamentList() {
     }
     load();
   }, []);
+
+  async function handleDelete() {
+    if (!deletingId) return;
+    setDeleting(true);
+    const { error } = await supabase.from("tournaments").delete().eq("id", deletingId);
+    if (error) {
+      toast.error(`Erro ao deletar: ${error.message}`);
+    } else {
+      setTournaments((prev) => prev.filter((t) => t.id !== deletingId));
+      toast.success("Torneio deletado.");
+    }
+    setDeleting(false);
+    setDeletingId(null);
+  }
+
+  const deletingTournament = tournaments.find((t) => t.id === deletingId);
 
   if (error) {
     return (
@@ -86,25 +107,58 @@ export function TournamentList() {
   }
 
   return (
-    <div className="space-y-3">
-      {tournaments.map((t) => (
-        <Link key={t.id} href={`/torneios/${t.id}`}>
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="font-semibold">{t.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(t.date + "T12:00:00").toLocaleDateString("pt-BR")} ·{" "}
-                  {counts[t.id] ?? 0} jogadores
-                </p>
-              </div>
-              <Badge className={`shrink-0 ${STATUS_COLOR[t.status]}`}>
-                {STATUS_LABEL[t.status]}
-              </Badge>
+    <>
+      <div className="space-y-3">
+        {tournaments.map((t) => (
+          <Card key={t.id} className="hover:shadow-md transition-shadow">
+            <CardContent className="p-4 flex items-center gap-3">
+              <Link href={`/torneios/${t.id}`} className="flex-1 flex items-center justify-between gap-3 min-w-0">
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{t.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(t.date + "T12:00:00").toLocaleDateString("pt-BR")} ·{" "}
+                    {counts[t.id] ?? 0} jogadores
+                  </p>
+                </div>
+                <Badge className={`shrink-0 ${STATUS_COLOR[t.status]}`}>
+                  {STATUS_LABEL[t.status]}
+                </Badge>
+              </Link>
+              <button
+                onClick={() => setDeletingId(t.id)}
+                className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                aria-label="Deletar torneio"
+              >
+                <Trash2 size={16} />
+              </button>
             </CardContent>
           </Card>
-        </Link>
-      ))}
-    </div>
+        ))}
+      </div>
+
+      <Dialog open={!!deletingId} onOpenChange={(open) => { if (!open) setDeletingId(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Deletar torneio</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja deletar <strong>{deletingTournament?.name}</strong>?
+              Todos os grupos, partidas e pontos do ranking deste torneio serão apagados permanentemente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />} disabled={deleting}>
+              Cancelar
+            </DialogClose>
+            <Button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting ? "Deletando…" : "Deletar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

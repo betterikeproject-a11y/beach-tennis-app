@@ -52,7 +52,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
 
       {nextUrl && (
         <Link href={nextUrl}>
-          <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12">
+          <Button className="w-full bg-brand hover:bg-brand-hover text-white h-12">
             {tournament.status === "draft" && "Sortear Grupos →"}
             {tournament.status === "grupos" && "Ver Fase de Grupos →"}
             {tournament.status === "eliminatorias" && "Ver Eliminatórias →"}

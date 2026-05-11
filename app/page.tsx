@@ -12,7 +12,7 @@ export default function HomePage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Torneios</h1>
         <Link href="/torneios/novo">
-          <Button className="bg-orange-500 hover:bg-orange-600 text-white">
+          <Button className="bg-brand hover:bg-brand-hover text-white">
             + Novo Torneio
           </Button>
         </Link>

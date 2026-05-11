@@ -33,7 +33,7 @@ export function ScoreInput({ scoreA, scoreB, onChange, disabled }: Props) {
   }
 
   const inputClass =
-    "w-12 h-12 text-center text-lg font-mono border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white disabled:bg-gray-100";
+    "w-12 h-12 text-center text-lg font-mono border rounded-md focus:outline-none focus:ring-2 focus:ring-brand bg-white disabled:bg-gray-100";
   const errorClass = !valid && bothSet ? "border-red-400" : "";
 
   return (
