@@ -66,13 +66,26 @@ export function TournamentList() {
     if (!deletingId) return;
     setDeleting(true);
     try {
-      // group_matches e knockout_pairs referenciam players sem CASCADE,
-      // então precisamos deletar na ordem certa antes de remover o torneio
+      // Busca os grupos do torneio para deletar group_matches explicitamente
+      const { data: groupRows } = await supabase
+        .from("groups")
+        .select("id")
+        .eq("tournament_id", deletingId);
+      const groupIds = (groupRows ?? []).map((g: { id: string }) => g.id);
+
+      // Deleta group_matches diretamente (referencia players sem CASCADE)
+      if (groupIds.length > 0) {
+        await supabase.from("group_matches").delete().in("group_id", groupIds);
+      }
+
+      // Deleta knockout data (knockout_pairs referencia players sem CASCADE)
       await supabase.from("knockout_matches").delete().eq("tournament_id", deletingId);
       await supabase.from("knockout_pairs").delete().eq("tournament_id", deletingId);
-      await supabase.from("groups").delete().eq("tournament_id", deletingId); // cascata para group_matches e group_members
+
+      // Agora deleta o torneio — cascade cuida de groups, group_members, players, points
       const { error } = await supabase.from("tournaments").delete().eq("id", deletingId);
       if (error) throw error;
+
       setTournaments((prev) => prev.filter((t) => t.id !== deletingId));
       toast.success("Torneio deletado.");
     } catch (e: unknown) {
