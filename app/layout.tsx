@@ -17,9 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.className} bg-gray-50 min-h-screen`}>
         <header className="border-b px-4 py-3 bg-white sticky top-0 z-40 shadow-sm">
           <div className="flex justify-center">
-            <a href="/" className="flex items-center gap-2.5">
-              <Image src="/logo.jpeg" alt="Jurerê Beach Sports" width={36} height={36} className="rounded-full" />
-              <span className="font-bold text-base text-brand tracking-tight leading-tight">
+            <a href="/" className="flex flex-col items-center gap-1.5 py-1">
+              <Image src="/logo.jpeg" alt="Jurerê Beach Sports" width={44} height={44} className="rounded-full shadow-sm" />
+              <span className="font-bold text-base text-brand tracking-tight leading-tight text-center">
                 Liga Jurerê Beach Sports
               </span>
             </a>

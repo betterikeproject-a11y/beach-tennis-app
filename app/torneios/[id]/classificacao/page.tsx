@@ -94,7 +94,7 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
     setEditingSlot(null);
   }, [allOverall, numClassifica]);
 
-  // All classified players flat list (for the swap select)
+  // All classified players flat list (for checking if in pair)
   const allClassified: (RichPlayer & { pairIdx: number; slot: 0 | 1 })[] = pairs.flatMap((pair, pi) => [
     { ...pair.p1, pairIdx: pi, slot: 0 as const },
     { ...pair.p2, pairIdx: pi, slot: 1 as const },
@@ -109,16 +109,22 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
         if (next[pi].p1.playerId === newPlayerId) { srcPairIdx = pi; srcSlot = 0; break; }
         if (next[pi].p2.playerId === newPlayerId) { srcPairIdx = pi; srcSlot = 1; break; }
       }
-      if (srcPairIdx === -1) return prev;
+      
+      if (srcPairIdx !== -1) {
+        const displaced = targetSlot === 0 ? next[targetPairIdx].p1 : next[targetPairIdx].p2;
+        const incoming = srcSlot === 0 ? next[srcPairIdx].p1 : next[srcPairIdx].p2;
 
-      const displaced = targetSlot === 0 ? next[targetPairIdx].p1 : next[targetPairIdx].p2;
-      const incoming = srcSlot === 0 ? next[srcPairIdx].p1 : next[srcPairIdx].p2;
+        if (targetSlot === 0) next[targetPairIdx].p1 = incoming;
+        else next[targetPairIdx].p2 = incoming;
 
-      if (targetSlot === 0) next[targetPairIdx].p1 = incoming;
-      else next[targetPairIdx].p2 = incoming;
-
-      if (srcSlot === 0) next[srcPairIdx].p1 = displaced;
-      else next[srcPairIdx].p2 = displaced;
+        if (srcSlot === 0) next[srcPairIdx].p1 = displaced;
+        else next[srcPairIdx].p2 = displaced;
+      } else {
+        const incoming = allOverall.find(p => p.playerId === newPlayerId);
+        if (!incoming) return prev;
+        if (targetSlot === 0) next[targetPairIdx].p1 = incoming;
+        else next[targetPairIdx].p2 = incoming;
+      }
 
       return next;
     });
@@ -278,12 +284,15 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
                                 onChange={(e) => swapSlot(i, slot, e.target.value)}
                               >
                                 <option value="" disabled>Selecione um jogador…</option>
-                                {allClassified.map((cp) => (
-                                  <option key={cp.playerId} value={cp.playerId}>
-                                    {cp.playerName} — {ordinal(cp.position)} geral · Gr.{cp.groupNumber} · {cp.wins}V · saldo {cp.saldo >= 0 ? "+" : ""}{cp.saldo}
-                                    {cp.pairIdx === i ? " (dupla atual)" : ` (Dupla #${cp.pairIdx + 1})`}
-                                  </option>
-                                ))}
+                                {allOverall.map((cp) => {
+                                  const inPair = pairs.findIndex(p => p.p1.playerId === cp.playerId || p.p2.playerId === cp.playerId);
+                                  return (
+                                    <option key={cp.playerId} value={cp.playerId}>
+                                      {cp.playerName} — {ordinal(cp.position)} geral · Gr.{cp.groupNumber} · {cp.wins}V · saldo {cp.saldo >= 0 ? "+" : ""}{cp.saldo}
+                                      {inPair === i ? " (dupla atual)" : inPair !== -1 ? ` (Dupla #${inPair + 1})` : " (Não classificado)"}
+                                    </option>
+                                  );
+                                })}
                               </select>
                               <button
                                 onClick={() => setEditingSlot(null)}

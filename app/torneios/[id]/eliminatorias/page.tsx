@@ -238,8 +238,11 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
 
       {tournamentComplete && (
         <div className="rounded-lg bg-brand-light border border-brand/30 p-4 text-center space-y-3">
-          <p className="text-2xl">🏆</p>
-          <p className="font-bold text-lg">Campeão: {pairName(finalMatch?.winner_pair_id ?? null)}</p>
+          <p className="text-3xl">🏆</p>
+          <div className="space-y-1">
+            <p className="font-bold text-lg text-brand">Campeão: {pairName(finalMatch?.winner_pair_id ?? null)}</p>
+            <p className="text-sm font-medium text-muted-foreground">Vice: {pairName(finalMatch ? (finalMatch.winner_pair_id === finalMatch.pair_a_id ? finalMatch.pair_b_id : finalMatch.pair_a_id) : null)}</p>
+          </div>
           <Button
             className="w-full bg-brand hover:bg-brand-hover text-white h-12 text-base"
             onClick={finalizeTournament}
