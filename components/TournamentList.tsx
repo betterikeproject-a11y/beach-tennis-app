@@ -65,12 +65,18 @@ export function TournamentList() {
   async function handleDelete() {
     if (!deletingId) return;
     setDeleting(true);
-    const { error } = await supabase.from("tournaments").delete().eq("id", deletingId);
-    if (error) {
-      toast.error(`Erro ao deletar: ${error.message}`);
-    } else {
+    try {
+      // group_matches e knockout_pairs referenciam players sem CASCADE,
+      // então precisamos deletar na ordem certa antes de remover o torneio
+      await supabase.from("knockout_matches").delete().eq("tournament_id", deletingId);
+      await supabase.from("knockout_pairs").delete().eq("tournament_id", deletingId);
+      await supabase.from("groups").delete().eq("tournament_id", deletingId); // cascata para group_matches e group_members
+      const { error } = await supabase.from("tournaments").delete().eq("id", deletingId);
+      if (error) throw error;
       setTournaments((prev) => prev.filter((t) => t.id !== deletingId));
       toast.success("Torneio deletado.");
+    } catch (e: unknown) {
+      toast.error(`Erro ao deletar: ${e instanceof Error ? e.message : String(e)}`);
     }
     setDeleting(false);
     setDeletingId(null);
