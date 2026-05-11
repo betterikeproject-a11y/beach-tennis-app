@@ -16,12 +16,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR">
       <body className={`${inter.className} bg-gray-50 min-h-screen`}>
         <header className="border-b px-4 py-3 bg-white sticky top-0 z-40 shadow-sm">
-          <a href="/" className="flex items-center gap-2.5">
-            <Image src="/logo.jpeg" alt="Jurerê Beach Sports" width={36} height={36} className="rounded-full" />
-            <span className="font-bold text-base text-brand tracking-tight leading-tight">
-              Liga Jurerê Beach Sports
-            </span>
-          </a>
+          <div className="flex justify-center">
+            <a href="/" className="flex items-center gap-2.5">
+              <Image src="/logo.jpeg" alt="Jurerê Beach Sports" width={36} height={36} className="rounded-full" />
+              <span className="font-bold text-base text-brand tracking-tight leading-tight">
+                Liga Jurerê Beach Sports
+              </span>
+            </a>
+          </div>
         </header>
         <main className="max-w-2xl mx-auto px-4 py-6">{children}</main>
         <Toaster position="top-center" richColors />

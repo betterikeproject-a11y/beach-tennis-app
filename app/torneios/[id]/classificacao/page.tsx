@@ -11,27 +11,22 @@ import { toast } from "sonner";
 import type { Player, Group, GroupMatch } from "@/lib/types/database";
 import type { PlayerStanding } from "@/lib/domain/standings";
 
-type PairEntry = {
-  p1: PlayerStanding & { groupNumber: number };
-  p2: PlayerStanding & { groupNumber: number };
-};
+type RichPlayer = PlayerStanding & { groupNumber: number };
+type PairEntry = { p1: RichPlayer; p2: RichPlayer };
 
-function ordinal(n: number) {
-  return `${n}º`;
-}
+function ordinal(n: number) { return `${n}º`; }
 
 export default function ClassificacaoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
 
-  const [allOverall, setAllOverall] = useState<(PlayerStanding & { groupNumber: number })[]>([]);
+  const [allOverall, setAllOverall] = useState<RichPlayer[]>([]);
   const [numClassifica, setNumClassifica] = useState(3);
   const [pairs, setPairs] = useState<PairEntry[]>([]);
-  const [swapTarget, setSwapTarget] = useState<{ pairIdx: number; slot: 0 | 1 } | null>(null);
+  const [editingSlot, setEditingSlot] = useState<{ pairIdx: number; slot: 0 | 1 } | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
-  // Load all data and build full standings
   useEffect(() => {
     async function load() {
       const [{ data: groups }, { data: members }, { data: matches }, { data: players }] = await Promise.all([
@@ -44,7 +39,6 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
       const groupRows = groups ?? [];
       const allPlayers = players ?? [];
 
-      // Build per-group standings and track group numbers
       const perGroupStandings = groupRows.map((g: Group) => {
         const memberIds = (members ?? []).filter((m) => m.group_id === g.id).map((m) => m.player_id);
         const gPlayers = allPlayers.filter((p: Player) => memberIds.includes(p.id));
@@ -56,7 +50,6 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
         return standings.map((s) => ({ ...s, groupNumber: g.group_number }));
       });
 
-      // All players overall (for the full table)
       const overall = computeOverallStandings(perGroupStandings).map((s, i) => ({
         ...s,
         groupNumber: perGroupStandings.flat().find((ps) => ps.playerId === s.playerId)?.groupNumber ?? 0,
@@ -68,41 +61,25 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
     load();
   }, [id]);
 
-  // Rebuild pairs whenever numClassifica or allOverall changes
   useEffect(() => {
     if (allOverall.length === 0) return;
 
-    // Group players back by their groupNumber
-    const byGroup: Record<number, typeof allOverall> = {};
+    const byGroup: Record<number, RichPlayer[]> = {};
     for (const s of allOverall) {
       byGroup[s.groupNumber] = byGroup[s.groupNumber] ?? [];
       byGroup[s.groupNumber].push(s);
     }
 
-    // Sort each group by their original group position (use overall position as proxy within group)
-    // Re-rank within each group by the same criteria
-    const classified: typeof allOverall = [];
-    for (const groupNum of Object.keys(byGroup).map(Number).sort()) {
-      const groupStandings = byGroup[groupNum]
-        .slice()
-        .sort((a, b) => {
-          if (b.points !== a.points) return b.points - a.points;
-          if (b.saldo !== a.saldo) return b.saldo - a.saldo;
-          if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
-          return a.playerName.localeCompare(b.playerName, "pt-BR", { sensitivity: "base" });
-        });
-      classified.push(...groupStandings.slice(0, numClassifica));
-    }
+    const sortFn = (a: RichPlayer, b: RichPlayer) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.saldo !== a.saldo) return b.saldo - a.saldo;
+      if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
+      return a.playerName.localeCompare(b.playerName, "pt-BR", { sensitivity: "base" });
+    };
 
-    // Overall rank of classified players
     const classifiedOverall = computeOverallStandings(
       Object.keys(byGroup).map((gn) =>
-        byGroup[Number(gn)].slice().sort((a, b) => {
-          if (b.points !== a.points) return b.points - a.points;
-          if (b.saldo !== a.saldo) return b.saldo - a.saldo;
-          if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
-          return a.playerName.localeCompare(b.playerName, "pt-BR", { sensitivity: "base" });
-        }).slice(0, numClassifica)
+        byGroup[Number(gn)].slice().sort(sortFn).slice(0, numClassifica)
       )
     ).map((s) => ({
       ...s,
@@ -114,33 +91,38 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
       newPairs.push({ p1: classifiedOverall[i], p2: classifiedOverall[i + 1] });
     }
     setPairs(newPairs);
-    setSwapTarget(null);
+    setEditingSlot(null);
   }, [allOverall, numClassifica]);
 
-  function handlePlayerClick(pairIdx: number, slot: 0 | 1) {
-    if (!swapTarget) {
-      setSwapTarget({ pairIdx, slot });
-      return;
-    }
-    if (swapTarget.pairIdx === pairIdx && swapTarget.slot === slot) {
-      setSwapTarget(null);
-      return;
-    }
-    // Perform swap
+  // All classified players flat list (for the swap select)
+  const allClassified: (RichPlayer & { pairIdx: number; slot: 0 | 1 })[] = pairs.flatMap((pair, pi) => [
+    { ...pair.p1, pairIdx: pi, slot: 0 as const },
+    { ...pair.p2, pairIdx: pi, slot: 1 as const },
+  ]);
+
+  function swapSlot(targetPairIdx: number, targetSlot: 0 | 1, newPlayerId: string) {
     setPairs((prev) => {
-      const next = prev.map((pair) => ({ ...pair }));
-      const fromPlayer = slot === 0 ? next[swapTarget.pairIdx].p1 : next[swapTarget.pairIdx].p2;
-      const toPlayer = slot === 0 ? next[pairIdx].p1 : next[pairIdx].p2;
+      const next = prev.map((p) => ({ p1: { ...p.p1 }, p2: { ...p.p2 } }));
+      // Find where newPlayer currently lives
+      let srcPairIdx = -1, srcSlot: 0 | 1 = 0;
+      for (let pi = 0; pi < next.length; pi++) {
+        if (next[pi].p1.playerId === newPlayerId) { srcPairIdx = pi; srcSlot = 0; break; }
+        if (next[pi].p2.playerId === newPlayerId) { srcPairIdx = pi; srcSlot = 1; break; }
+      }
+      if (srcPairIdx === -1) return prev;
 
-      if (swapTarget.slot === 0) next[swapTarget.pairIdx].p1 = toPlayer;
-      else next[swapTarget.pairIdx].p2 = toPlayer;
+      const displaced = targetSlot === 0 ? next[targetPairIdx].p1 : next[targetPairIdx].p2;
+      const incoming = srcSlot === 0 ? next[srcPairIdx].p1 : next[srcPairIdx].p2;
 
-      if (slot === 0) next[pairIdx].p1 = fromPlayer;
-      else next[pairIdx].p2 = fromPlayer;
+      if (targetSlot === 0) next[targetPairIdx].p1 = incoming;
+      else next[targetPairIdx].p2 = incoming;
+
+      if (srcSlot === 0) next[srcPairIdx].p1 = displaced;
+      else next[srcPairIdx].p2 = displaced;
 
       return next;
     });
-    setSwapTarget(null);
+    setEditingSlot(null);
   }
 
   async function generateKnockout() {
@@ -157,21 +139,19 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
         player2_id: pair.p2.playerId,
       }));
       const { data: insertedPairs, error: pe } = await supabase
-        .from("knockout_pairs")
-        .insert(pairRows)
-        .select("id, seed");
+        .from("knockout_pairs").insert(pairRows).select("id, seed");
       if (pe || !insertedPairs) throw pe ?? new Error("Falha ao inserir duplas");
 
-      const pairRefs = insertedPairs.map((p: { id: string; seed: number }) => ({ id: p.id, seed: p.seed }));
-      const bracket = generateBracket(pairRefs);
-      const matchRows = bracket.map((m) => ({
-        tournament_id: id,
-        phase: m.phase,
-        bracket_position: m.bracketPosition,
-        pair_a_id: m.pairAId,
-        pair_b_id: m.pairBId,
-      }));
-      const { error: me } = await supabase.from("knockout_matches").insert(matchRows);
+      const bracket = generateBracket(insertedPairs.map((p: { id: string; seed: number }) => ({ id: p.id, seed: p.seed })));
+      const { error: me } = await supabase.from("knockout_matches").insert(
+        bracket.map((m) => ({
+          tournament_id: id,
+          phase: m.phase,
+          bracket_position: m.bracketPosition,
+          pair_a_id: m.pairAId,
+          pair_b_id: m.pairBId,
+        }))
+      );
       if (me) throw me;
 
       toast.success("Chaveamento gerado!");
@@ -197,16 +177,13 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
           <label className="flex items-center gap-2 text-sm font-medium">
             Classificados por grupo:
             <input
-              type="number"
-              min={1}
-              max={5}
-              value={numClassifica}
+              type="number" min={1} max={5} value={numClassifica}
               onChange={(e) => setNumClassifica(Math.max(1, Math.min(5, parseInt(e.target.value) || 1)))}
               className="w-14 border rounded px-2 py-1 text-center text-sm"
             />
           </label>
           <span className="text-sm text-muted-foreground">
-            {pairs.length} dupla{pairs.length !== 1 ? "s" : ""} classificada{pairs.length !== 1 ? "s" : ""} →{" "}
+            {pairs.length} dupla{pairs.length !== 1 ? "s" : ""} →{" "}
             {suggestedPhase
               ? `início nas ${suggestedPhase === "final" ? "Final" : suggestedPhase === "semis" ? "Semis" : "Quartas"}`
               : "número inválido"}
@@ -238,10 +215,7 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
               {allOverall.map((s) => {
                 const isClassified = classifiedIds.has(s.playerId);
                 return (
-                  <tr
-                    key={s.playerId}
-                    className={`border-b last:border-0 ${isClassified ? "bg-brand-light" : ""}`}
-                  >
+                  <tr key={s.playerId} className={`border-b last:border-0 ${isClassified ? "bg-brand-light" : ""}`}>
                     <td className="py-1.5 pr-1 text-muted-foreground font-mono font-semibold">{s.position}</td>
                     <td className="py-1.5 font-medium max-w-[110px] truncate">{s.playerName}</td>
                     <td className="py-1.5 px-1 text-center text-muted-foreground">{s.groupNumber}</td>
@@ -268,72 +242,74 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
 
       {/* Pairs */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-base">Duplas para o Chaveamento</h2>
-          {swapTarget && (
-            <button
-              onClick={() => setSwapTarget(null)}
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              Cancelar troca
-            </button>
-          )}
-        </div>
-
-        {swapTarget && (
-          <p className="text-xs text-brand font-medium text-center bg-brand-light rounded-md py-2">
-            Selecione outro jogador para trocar com{" "}
-            <strong>
-              {swapTarget.slot === 0 ? pairs[swapTarget.pairIdx].p1.playerName : pairs[swapTarget.pairIdx].p2.playerName}
-            </strong>
-          </p>
-        )}
+        <h2 className="font-semibold text-base">Duplas para o Chaveamento</h2>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Clique em "Trocar" ao lado de qualquer jogador para substituí-lo por outro classificado.
+        </p>
 
         {pairs.map((pair, i) => {
-          const players = [pair.p1, pair.p2] as const;
+          const slots = [
+            { player: pair.p1, slot: 0 as const },
+            { player: pair.p2, slot: 1 as const },
+          ];
           return (
             <Card key={i} className="overflow-hidden">
               <CardContent className="p-0">
-                <div className="flex items-center gap-0">
-                  {/* Seed badge */}
-                  <div className="bg-brand text-white flex flex-col items-center justify-center px-3 py-4 min-w-[52px] self-stretch">
-                    <span className="text-xs font-medium opacity-80">Seed</span>
-                    <span className="text-xl font-bold leading-none">#{i + 1}</span>
+                <div className="flex">
+                  {/* Pair number badge */}
+                  <div className="bg-brand text-white flex flex-col items-center justify-center px-3 min-w-[64px] self-stretch">
+                    <span className="text-[10px] font-medium opacity-80 uppercase tracking-wide">Dupla</span>
+                    <span className="text-2xl font-bold leading-none">#{i + 1}</span>
                   </div>
 
                   {/* Players */}
                   <div className="flex-1 divide-y">
-                    {players.map((player, slot) => {
-                      const isSelected =
-                        swapTarget?.pairIdx === i && swapTarget?.slot === slot;
-                      const isSwappable = swapTarget !== null && !(swapTarget.pairIdx === i && swapTarget.slot === slot);
+                    {slots.map(({ player, slot }) => {
+                      const isEditing = editingSlot?.pairIdx === i && editingSlot?.slot === slot;
                       return (
-                        <button
-                          key={player.playerId}
-                          onClick={() => handlePlayerClick(i, slot as 0 | 1)}
-                          className={`w-full text-left px-4 py-2.5 transition-colors flex items-center justify-between gap-2 ${
-                            isSelected
-                              ? "bg-brand/10 ring-1 ring-inset ring-brand"
-                              : isSwappable
-                              ? "hover:bg-yellow-50 cursor-pointer"
-                              : swapTarget
-                              ? "opacity-50"
-                              : "hover:bg-muted/50 cursor-pointer"
-                          }`}
-                        >
-                          <div>
-                            <span className="text-sm font-semibold">{player.playerName}</span>
-                            <span className="text-xs text-muted-foreground ml-2">
-                              {ordinal(player.position)} geral · Gr.{player.groupNumber} · {player.wins}V · saldo {player.saldo >= 0 ? "+" : ""}{player.saldo}
-                            </span>
-                          </div>
-                          {isSwappable && (
-                            <span className="text-xs text-brand font-semibold shrink-0">Trocar ⇄</span>
+                        <div key={player.playerId} className="px-4 py-2.5 flex items-center gap-3">
+                          {isEditing ? (
+                            /* Swap dropdown */
+                            <div className="flex-1 flex items-center gap-2">
+                              <select
+                                autoFocus
+                                className="flex-1 border rounded-md px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"
+                                defaultValue={player.playerId}
+                                onChange={(e) => swapSlot(i, slot, e.target.value)}
+                              >
+                                <option value="" disabled>Selecione um jogador…</option>
+                                {allClassified.map((cp) => (
+                                  <option key={cp.playerId} value={cp.playerId}>
+                                    {cp.playerName} — {ordinal(cp.position)} geral · Gr.{cp.groupNumber} · {cp.wins}V · saldo {cp.saldo >= 0 ? "+" : ""}{cp.saldo}
+                                    {cp.pairIdx === i ? " (dupla atual)" : ` (Dupla #${cp.pairIdx + 1})`}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => setEditingSlot(null)}
+                                className="text-xs text-muted-foreground hover:text-red-500 px-2 py-1 border rounded-md"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            /* Normal display */
+                            <>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-semibold">{player.playerName}</span>
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  {ordinal(player.position)} geral · Gr.{player.groupNumber} · {player.wins}V · saldo {player.saldo >= 0 ? "+" : ""}{player.saldo}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => setEditingSlot({ pairIdx: i, slot })}
+                                className="shrink-0 text-xs text-brand hover:text-brand-hover font-medium border border-brand/30 rounded px-2 py-0.5 hover:bg-brand-light transition-colors"
+                              >
+                                Trocar
+                              </button>
+                            </>
                           )}
-                          {isSelected && (
-                            <span className="text-xs text-brand font-semibold shrink-0">Selecionado ●</span>
-                          )}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -343,10 +319,6 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
           );
         })}
       </div>
-
-      <p className="text-xs text-center text-muted-foreground -mt-2">
-        Toque em um jogador para selecioná-lo, depois toque em outro para realizar a troca.
-      </p>
 
       <Button
         className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-base"
