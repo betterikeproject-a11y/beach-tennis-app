@@ -54,10 +54,8 @@ export function LoginDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="text-muted-foreground flex gap-1.5 items-center">
-          <Lock size={16} /> Admin
-        </Button>
+      <DialogTrigger render={<Button variant="outline" size="sm" className="text-muted-foreground flex gap-1.5 items-center" />}>
+        <Lock size={16} /> Admin
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
