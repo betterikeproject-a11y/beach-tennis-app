@@ -20,16 +20,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="pt-BR">
       <body className={`${inter.className} bg-gray-50 min-h-screen`}>
         <AuthProvider isAdmin={isAdmin}>
-          <header className="border-b px-4 py-3 bg-white sticky top-0 z-40 shadow-sm relative">
-            <div className="flex justify-center max-w-[1600px] w-full mx-auto relative">
-              <a href="/" className="flex flex-col items-center gap-1.5 py-1">
+          <header className="border-b px-4 py-3 bg-white sticky top-0 z-40 shadow-sm">
+            <div className="flex items-center justify-between max-w-[1600px] w-full mx-auto">
+              <a href="/" className="flex items-center gap-3">
                 <Image src="/logo.jpeg" alt="Jurerê Beach Sports" width={44} height={44} className="rounded-full shadow-sm" />
-                <span className="font-bold text-base text-brand tracking-tight leading-tight text-center">
+                <span className="font-bold text-lg text-brand tracking-tight">
                   Liga Jurerê Beach Sports
                 </span>
               </a>
-            </div>
-            <div className="absolute top-3 right-4">
               <LoginDialog />
             </div>
           </header>
