@@ -84,6 +84,14 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
           </Link>
         </div>
       )}
+
+      {(tournament.status === "grupos" || tournament.status === "eliminatorias" || tournament.status === "finalizado") && (
+        <Link href={`/torneios/${id}/visualizacao`} target="_blank">
+          <Button variant="outline" className="w-full text-muted-foreground">
+            👁 Visualização ao vivo (abrir em nova aba)
+          </Button>
+        </Link>
+      )}
     </div>
   );
 }

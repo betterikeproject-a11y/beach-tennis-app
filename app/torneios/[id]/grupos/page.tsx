@@ -10,15 +10,32 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import type { Group, GroupMatch, Player } from "@/lib/types/database";
+import type { Group, GroupMatch, GroupMember, Player } from "@/lib/types/database";
 import type { PlayerStanding } from "@/lib/domain/standings";
+
+const GROUP_COLORS = [
+  { border: "border-t-4 border-t-blue-400", title: "text-blue-600" },
+  { border: "border-t-4 border-t-emerald-400", title: "text-emerald-600" },
+  { border: "border-t-4 border-t-orange-400", title: "text-orange-600" },
+  { border: "border-t-4 border-t-purple-400", title: "text-purple-600" },
+  { border: "border-t-4 border-t-rose-400", title: "text-rose-600" },
+  { border: "border-t-4 border-t-amber-400", title: "text-amber-600" },
+  { border: "border-t-4 border-t-cyan-400", title: "text-cyan-600" },
+  { border: "border-t-4 border-t-indigo-400", title: "text-indigo-600" },
+] as const;
 
 type GroupData = {
   group: Group;
   players: Player[];
   matches: GroupMatch[];
   standings: PlayerStanding[];
+  members: GroupMember[];
+  overrides: Record<string, number | null>;
 };
+
+function isTied(a: PlayerStanding, b: PlayerStanding): boolean {
+  return a.points === b.points && a.saldo === b.saldo && a.gamesFor === b.gamesFor;
+}
 
 export default function GruposPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -40,14 +57,20 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
     if (!groupRows || !allPlayers) { setError("Erro ao carregar dados"); setLoading(false); return; }
 
     const built: GroupData[] = groupRows.map((group) => {
-      const memberIds = (members ?? []).filter((m) => m.group_id === group.id).map((m) => m.player_id);
+      const groupMembers = (members ?? []).filter((m) => m.group_id === group.id);
+      const memberIds = groupMembers.map((m) => m.player_id);
       const players = (allPlayers ?? []).filter((p) => memberIds.includes(p.id));
       const matches = (allMatches ?? []).filter((m) => m.group_id === group.id);
+      const overrides: Record<string, number | null> = {};
+      for (const gm of groupMembers) {
+        overrides[gm.player_id] = gm.position_override;
+      }
       const standings = computeGroupStandings(
         players.map((p) => ({ id: p.id, name: p.name })),
-        matches
+        matches,
+        overrides
       );
-      return { group, players, matches, standings };
+      return { group, players, matches, standings, members: groupMembers, overrides };
     });
 
     setGroups(built);
@@ -56,13 +79,10 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
 
   useEffect(() => { loadData(); }, [id]);
 
-  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel(`grupos-${id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "group_matches" }, () => {
-        loadData();
-      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "group_matches" }, () => { loadData(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [id]);
@@ -84,45 +104,62 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
     if (error) { toast.error("Erro ao salvar placar"); return; }
     setSavedIndicator(matchId);
     setTimeout(() => setSavedIndicator(null), 1500);
-    // refresh local state
     setGroups((prev) =>
-      prev.map((gd) => ({
-        ...gd,
-        matches: gd.matches.map((m) => {
+      prev.map((gd) => {
+        const updatedMatches = gd.matches.map((m) => {
           if (m.id !== matchId) return m;
-          const updated = { ...m, score_dupla1: scoreA, score_dupla2: scoreB, status: (bothSet && valid ? "concluido" : "pendente") as GroupMatch["status"] };
-          return updated;
-        }),
-        standings: computeGroupStandings(
-          gd.players.map((p) => ({ id: p.id, name: p.name })),
-          gd.matches.map((m) => {
-            if (m.id !== matchId) return m;
-            return { ...m, score_dupla1: scoreA, score_dupla2: scoreB };
-          })
-        ),
-      }))
+          return { ...m, score_dupla1: scoreA, score_dupla2: scoreB, status: (bothSet && valid ? "concluido" : "pendente") as GroupMatch["status"] };
+        });
+        return {
+          ...gd,
+          matches: updatedMatches,
+          standings: computeGroupStandings(
+            gd.players.map((p) => ({ id: p.id, name: p.name })),
+            updatedMatches,
+            gd.overrides
+          ),
+        };
+      })
     );
   }, []);
 
   function handleScoreChange(matchId: string, a: number | null, b: number | null) {
     clearTimeout(debounceTimers.current[matchId]);
-    // Update local state immediately for responsive feel
     setGroups((prev) =>
-      prev.map((gd) => ({
-        ...gd,
-        matches: gd.matches.map((m) => m.id === matchId ? { ...m, score_dupla1: a, score_dupla2: b } : m),
-        standings: computeGroupStandings(
-          gd.players.map((p) => ({ id: p.id, name: p.name })),
-          gd.matches.map((m) => m.id === matchId ? { ...m, score_dupla1: a, score_dupla2: b } : m)
-        ),
-      }))
+      prev.map((gd) => {
+        const updatedMatches = gd.matches.map((m) => m.id === matchId ? { ...m, score_dupla1: a, score_dupla2: b } : m);
+        return {
+          ...gd,
+          matches: updatedMatches,
+          standings: computeGroupStandings(
+            gd.players.map((p) => ({ id: p.id, name: p.name })),
+            updatedMatches,
+            gd.overrides
+          ),
+        };
+      })
     );
     debounceTimers.current[matchId] = setTimeout(() => saveScore(matchId, a, b), 500);
   }
 
-  const allDone = groups.length > 0 && groups.every((gd) =>
-    gd.matches.every((m) => m.status === "concluido")
-  );
+  async function handleSwapTiebreaker(groupId: string, p1: PlayerStanding, p2: PlayerStanding) {
+    const gd = groups.find((g) => g.group.id === groupId);
+    if (!gd) return;
+    const m1 = gd.members.find((m) => m.player_id === p1.playerId);
+    const m2 = gd.members.find((m) => m.player_id === p2.playerId);
+    if (!m1 || !m2) return;
+
+    const o1 = m1.position_override ?? p1.position;
+    const o2 = m2.position_override ?? p2.position;
+
+    await Promise.all([
+      supabase.from("group_members").update({ position_override: o2 }).eq("id", m1.id),
+      supabase.from("group_members").update({ position_override: o1 }).eq("id", m2.id),
+    ]);
+    loadData();
+  }
+
+  const allDone = groups.length > 0 && groups.every((gd) => gd.matches.every((m) => m.status === "concluido"));
 
   async function advanceToKnockout() {
     await supabase.from("tournaments").update({ status: "eliminatorias" }).eq("id", id);
@@ -144,19 +181,24 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Fase de Grupos</h1>
-        {savedIndicator && (
-          <span className="text-xs text-green-600 animate-pulse">✓ salvo</span>
-        )}
+        {savedIndicator && <span className="text-xs text-green-600 animate-pulse">✓ salvo</span>}
       </div>
 
-      {groups.map((gd) => (
-        <GroupCard
-          key={gd.group.id}
-          gd={gd}
-          savedMatchId={savedIndicator}
-          onScoreChange={handleScoreChange}
-        />
-      ))}
+      <div className="grid gap-4 md:grid-cols-2 items-start">
+        {groups.map((gd) => {
+          const color = GROUP_COLORS[(gd.group.group_number - 1) % GROUP_COLORS.length];
+          return (
+            <GroupCard
+              key={gd.group.id}
+              gd={gd}
+              savedMatchId={savedIndicator}
+              colorClasses={color}
+              onScoreChange={handleScoreChange}
+              onSwapTiebreaker={(p1, p2) => handleSwapTiebreaker(gd.group.id, p1, p2)}
+            />
+          );
+        })}
+      </div>
 
       {allDone && (
         <Button
@@ -173,21 +215,28 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
 function GroupCard({
   gd,
   savedMatchId,
+  colorClasses,
   onScoreChange,
+  onSwapTiebreaker,
 }: {
   gd: GroupData;
   savedMatchId: string | null;
+  colorClasses: { border: string; title: string };
   onScoreChange: (id: string, a: number | null, b: number | null) => void;
+  onSwapTiebreaker: (p1: PlayerStanding, p2: PlayerStanding) => void;
 }) {
+  const hasTies = gd.standings.some((s, i) => i < gd.standings.length - 1 && isTied(s, gd.standings[i + 1]));
+
   return (
-    <Card>
+    <Card className={colorClasses.border}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Grupo {gd.group.group_number}</CardTitle>
+        <CardTitle className={`text-base ${colorClasses.title}`}>Grupo {gd.group.group_number}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Matches */}
         <div className="space-y-3">
           {gd.matches
+            .slice()
             .sort((a, b) => a.match_number - b.match_number)
             .map((m) => {
               const d1 = [m.dupla1_player1_id, m.dupla1_player2_id]
@@ -227,29 +276,67 @@ function GroupCard({
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="text-left py-1 pr-1">#</th>
+                <th className="text-left py-1 pr-1 w-5">#</th>
                 <th className="text-left py-1">Jogador</th>
-                <th className="text-right py-1 px-1">V</th>
-                <th className="text-right py-1 px-1">G+</th>
-                <th className="text-right py-1 px-1">G-</th>
-                <th className="text-right py-1 px-1">Saldo</th>
-                <th className="text-right py-1">Pts</th>
+                <th className="text-right py-1 px-1 w-6">V</th>
+                <th className="text-right py-1 px-1 w-7">G+</th>
+                <th className="text-right py-1 px-1 w-7">G-</th>
+                <th className="text-right py-1 px-1 w-10">Saldo</th>
+                <th className="text-right py-1 w-7">Pts</th>
+                <th className="w-6"></th>
               </tr>
             </thead>
             <tbody>
-              {gd.standings.map((s) => (
-                <tr key={s.playerId} className="border-b last:border-0">
-                  <td className="py-1 pr-1 text-muted-foreground">{s.position}</td>
-                  <td className="py-1 font-medium truncate max-w-[100px]">{s.playerName}</td>
-                  <td className="py-1 px-1 text-center">{s.wins}</td>
-                  <td className="py-1 px-1 text-center text-green-600">{s.gamesFor}</td>
-                  <td className="py-1 px-1 text-center text-red-500">{s.gamesAgainst}</td>
-                  <td className={`py-1 px-1 text-center ${s.saldo >= 0 ? "text-green-600" : "text-red-500"}`}>{s.saldo > 0 ? `+${s.saldo}` : s.saldo}</td>
-                  <td className="py-1 text-right font-bold">{s.points}</td>
-                </tr>
-              ))}
+              {gd.standings.map((s, idx) => {
+                const above = idx > 0 ? gd.standings[idx - 1] : null;
+                const below = idx < gd.standings.length - 1 ? gd.standings[idx + 1] : null;
+                const tiedAbove = above != null && isTied(s, above);
+                const tiedBelow = below != null && isTied(s, below);
+                const isManual = gd.overrides[s.playerId] != null;
+                return (
+                  <tr key={s.playerId} className="border-b last:border-0">
+                    <td className="py-1 pr-1 text-muted-foreground font-mono font-medium">{s.position}</td>
+                    <td className="py-1 font-medium truncate max-w-[90px]">
+                      {s.playerName}
+                      {isManual && <span className="ml-0.5 text-[9px] text-amber-500" title="Posição definida manualmente">✎</span>}
+                    </td>
+                    <td className="py-1 px-1 text-center">{s.wins}</td>
+                    <td className="py-1 px-1 text-center text-green-600">{s.gamesFor}</td>
+                    <td className="py-1 px-1 text-center text-red-500">{s.gamesAgainst}</td>
+                    <td className={`py-1 px-1 text-center ${s.saldo >= 0 ? "text-green-600" : "text-red-500"}`}>
+                      {s.saldo > 0 ? `+${s.saldo}` : s.saldo}
+                    </td>
+                    <td className="py-1 text-right font-bold">{s.points}</td>
+                    <td className="py-1 pl-1 text-center">
+                      {(tiedAbove || tiedBelow) && (
+                        <div className="flex flex-col items-center gap-0">
+                          {tiedAbove && (
+                            <button
+                              onClick={() => onSwapTiebreaker(s, above!)}
+                              className="text-amber-500 hover:text-amber-700 text-sm leading-none font-bold"
+                              title="Mover para cima (desempate manual)"
+                            >↑</button>
+                          )}
+                          {tiedBelow && (
+                            <button
+                              onClick={() => onSwapTiebreaker(s, below!)}
+                              className="text-amber-500 hover:text-amber-700 text-sm leading-none font-bold"
+                              title="Mover para baixo (desempate manual)"
+                            >↓</button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          {hasTies && (
+            <p className="text-[10px] text-amber-600 mt-1.5">
+              Empate detectado — use ↑↓ para definir a colocação manualmente.
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

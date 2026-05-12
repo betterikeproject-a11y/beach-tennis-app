@@ -34,6 +34,7 @@ export interface GroupMember {
   id: string;
   group_id: string;
   player_id: string;
+  position_override: number | null;
 }
 
 export interface GroupMatch {
@@ -111,7 +112,7 @@ export type Database = {
       tournaments: { Row: Tournament; Insert: Omit<Tournament, "id" | "created_at">; Update: Partial<Tournament> };
       players: { Row: Player; Insert: Omit<Player, "id" | "created_at">; Update: Partial<Player> };
       groups: { Row: Group; Insert: Omit<Group, "id">; Update: Partial<Group> };
-      group_members: { Row: GroupMember; Insert: Omit<GroupMember, "id">; Update: Partial<GroupMember> };
+      group_members: { Row: GroupMember; Insert: Omit<GroupMember, "id" | "position_override"> & { position_override?: number | null }; Update: Partial<GroupMember> };
       group_matches: { Row: GroupMatch; Insert: Omit<GroupMatch, "id" | "updated_at">; Update: Partial<GroupMatch> };
       knockout_pairs: { Row: KnockoutPair; Insert: Omit<KnockoutPair, "id">; Update: Partial<KnockoutPair> };
       knockout_matches: { Row: KnockoutMatch; Insert: Omit<KnockoutMatch, "id" | "updated_at">; Update: Partial<KnockoutMatch> };

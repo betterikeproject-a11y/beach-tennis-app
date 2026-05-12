@@ -40,12 +40,16 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
       const allPlayers = players ?? [];
 
       const perGroupStandings = groupRows.map((g: Group) => {
-        const memberIds = (members ?? []).filter((m) => m.group_id === g.id).map((m) => m.player_id);
+        const groupMembers = (members ?? []).filter((m) => m.group_id === g.id);
+        const memberIds = groupMembers.map((m) => m.player_id);
         const gPlayers = allPlayers.filter((p: Player) => memberIds.includes(p.id));
         const gMatches = (matches ?? []).filter((m: GroupMatch) => m.group_id === g.id);
+        const overrides: Record<string, number | null> = {};
+        for (const gm of groupMembers) overrides[gm.player_id] = gm.position_override;
         const standings = computeGroupStandings(
           gPlayers.map((p: Player) => ({ id: p.id, name: p.name })),
-          gMatches
+          gMatches,
+          overrides
         );
         return standings.map((s) => ({ ...s, groupNumber: g.group_number }));
       });

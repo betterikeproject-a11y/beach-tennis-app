@@ -128,10 +128,13 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
       ]);
 
       const perGroupStandings = (groups ?? []).map((g: Group) => {
-        const memberIds = (members ?? []).filter((m: { group_id: string }) => m.group_id === g.id).map((m: { player_id: string }) => m.player_id);
+        const groupMembers = (members ?? []).filter((m: { group_id: string }) => m.group_id === g.id);
+        const memberIds = groupMembers.map((m: { player_id: string }) => m.player_id);
         const gPlayers = players.filter((p) => memberIds.includes(p.id));
         const gMatches = (groupMatchData ?? []).filter((m: GroupMatch) => m.group_id === g.id);
-        return computeGroupStandings(gPlayers.map((p) => ({ id: p.id, name: p.name })), gMatches);
+        const overrides: Record<string, number | null> = {};
+        for (const gm of groupMembers) overrides[(gm as { player_id: string; position_override: number | null }).player_id] = (gm as { player_id: string; position_override: number | null }).position_override;
+        return computeGroupStandings(gPlayers.map((p) => ({ id: p.id, name: p.name })), gMatches, overrides);
       });
       const overallStandings = computeOverallStandings(perGroupStandings);
 

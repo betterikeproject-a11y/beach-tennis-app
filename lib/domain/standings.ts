@@ -23,11 +23,12 @@ export type PlayerRef = { id: string; name: string };
 
 /**
  * Computes standings for a single group given its players and matches.
- * Sort order: points DESC → saldo DESC → gamesFor DESC → name ASC.
+ * Sort order: points DESC → saldo DESC → gamesFor DESC → positionOverride ASC → name ASC.
  */
 export function computeGroupStandings(
   players: PlayerRef[],
-  matches: MatchRecord[]
+  matches: MatchRecord[],
+  positionOverrides: Record<string, number | null> = {}
 ): PlayerStanding[] {
   const stats: Record<string, PlayerStanding> = {};
 
@@ -71,7 +72,18 @@ export function computeGroupStandings(
     points: s.wins * 3,
   }));
 
-  list.sort(compareStandings);
+  list.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.saldo !== a.saldo) return b.saldo - a.saldo;
+    if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
+    const oA = positionOverrides[a.playerId] ?? null;
+    const oB = positionOverrides[b.playerId] ?? null;
+    if (oA !== null && oB !== null) return oA - oB;
+    if (oA !== null) return -1;
+    if (oB !== null) return 1;
+    return a.playerName.localeCompare(b.playerName, "pt-BR", { sensitivity: "base" });
+  });
+
   return list.map((s, i) => ({ ...s, position: i + 1 }));
 }
 
