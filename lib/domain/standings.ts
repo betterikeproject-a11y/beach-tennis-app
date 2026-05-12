@@ -100,6 +100,7 @@ export function computeOverallStandings(
 }
 
 function compareStandings(a: PlayerStanding, b: PlayerStanding): number {
+  if (a.position !== b.position) return a.position - b.position;
   if (b.points !== a.points) return b.points - a.points;
   if (b.saldo !== a.saldo) return b.saldo - a.saldo;
   if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
