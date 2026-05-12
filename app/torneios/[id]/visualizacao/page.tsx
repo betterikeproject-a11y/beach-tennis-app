@@ -98,10 +98,10 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
     });
     setGroups(built);
 
-    const allGroupStandings = built.flatMap(gd => gd.standings.map(s => ({ ...s, groupNumber: gd.group.group_number })));
+    const allGroupStandings = built.map(gd => gd.standings.map(s => ({ ...s, groupNumber: gd.group.group_number })));
     const overall = computeOverallStandings(allGroupStandings).map((s, i) => ({
       ...s,
-      groupNumber: allGroupStandings.find(gs => gs.playerId === s.playerId)?.groupNumber ?? 0,
+      groupNumber: allGroupStandings.flat().find(gs => gs.playerId === s.playerId)?.groupNumber ?? 0,
       position: i + 1,
     }));
     setAllOverall(overall);
