@@ -209,10 +209,11 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
           <h2 className="font-semibold text-base text-muted-foreground uppercase tracking-wide text-sm">
             {PHASE_LABEL[phase]}
           </h2>
-          {matches
-            .filter((m) => m.phase === phase)
-            .sort((a, b) => a.bracket_position - b.bracket_position)
-            .map((m) => (
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
+            {matches
+              .filter((m) => m.phase === phase)
+              .sort((a, b) => a.bracket_position - b.bracket_position)
+              .map((m) => (
               <Card key={m.id} className={m.winner_pair_id ? "bg-green-50 border-green-200" : ""}>
                 <CardContent className="p-4">
                   <div className="flex flex-col gap-3">
@@ -272,6 +273,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
                 </CardContent>
               </Card>
             ))}
+          </div>
         </div>
       ))}
 

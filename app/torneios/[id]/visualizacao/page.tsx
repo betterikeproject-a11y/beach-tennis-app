@@ -189,9 +189,9 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
 
         {/* Groups grid */}
         {groups.length > 0 && (
-          <section className="space-y-3">
+          <section className="space-y-4">
             <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide">Fase de Grupos</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
               {groups.map((gd) => {
                 const color = GROUP_COLORS[(gd.group.group_number - 1) % GROUP_COLORS.length];
                 return (
