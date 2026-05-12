@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,8 @@ function serverSupabase() {
 
 export default async function TournamentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const cookieStore = await cookies();
+  const isAdmin = cookieStore.get("admin_token")?.value === "true";
   const sb = serverSupabase();
 
   const { data: tournament } = await sb.from("tournaments").select("*").eq("id", id).single() as { data: Tournament | null };
@@ -50,7 +53,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
         <Badge className="mt-1 shrink-0">{STATUS_LABEL[tournament.status]}</Badge>
       </div>
 
-      {nextUrl && (
+      {isAdmin && nextUrl && (
         <Link href={nextUrl}>
           <Button className="w-full bg-brand hover:bg-brand-hover text-white h-12">
             {tournament.status === "draft" && "Sortear Grupos →"}
@@ -74,7 +77,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
         </CardContent>
       </Card>
 
-      {tournament.status === "grupos" && (
+      {isAdmin && tournament.status === "grupos" && (
         <div className="flex gap-2">
           <Link href={`/torneios/${id}/grupos`} className="flex-1">
             <Button variant="outline" className="w-full">Jogos dos Grupos</Button>

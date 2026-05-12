@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useAuth } from "@/components/AuthProvider";
 import type { LeagueRankingPointsConfig } from "@/lib/types/database";
 
 type Config = Omit<LeagueRankingPointsConfig, "id" | "updated_at">;
@@ -31,6 +32,7 @@ export default function ConfiguracoesPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     supabase
@@ -84,19 +86,22 @@ export default function ConfiguracoesPage() {
                 value={config[key]}
                 onChange={(e) => setConfig((prev) => ({ ...prev, [key]: parseInt(e.target.value) || 0 }))}
                 className="w-24 text-center"
+                disabled={!isAdmin}
               />
             </div>
           ))}
         </CardContent>
       </Card>
 
-      <Button
-        className="w-full bg-brand hover:bg-brand-hover text-white h-12"
-        onClick={save}
-        disabled={saving}
-      >
-        {saving ? "Salvando…" : "Salvar Configurações"}
-      </Button>
+      {isAdmin && (
+        <Button
+          className="w-full bg-brand hover:bg-brand-hover text-white h-12"
+          onClick={save}
+          disabled={saving}
+        >
+          {saving ? "Salvando…" : "Salvar Configurações"}
+        </Button>
+      )}
     </div>
   );
 }

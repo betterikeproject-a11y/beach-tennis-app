@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { useAuth } from "@/components/AuthProvider";
 import type { KnockoutMatch, KnockoutPair, Player, Group, GroupMatch } from "@/lib/types/database";
 import type { KnockoutPhase } from "@/lib/domain/bracket";
 
@@ -32,6 +33,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [finalizing, setFinalizing] = useState(false);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const { isAdmin } = useAuth();
 
   async function loadData() {
     const [{ data: m }, { data: p }, { data: pl }] = await Promise.all([
@@ -228,6 +230,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
                         scoreA={m.score_a}
                         scoreB={m.score_b}
                         onChange={(a, b) => handleScoreChange(m, a, b)}
+                        disabled={!isAdmin}
                       />
                     ) : (
                       <span className="text-sm text-muted-foreground italic">Aguardando</span>
@@ -246,13 +249,15 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
             <p className="font-bold text-lg text-brand">Campeão: {pairName(finalMatch?.winner_pair_id ?? null)}</p>
             <p className="text-sm font-medium text-muted-foreground">Vice: {pairName(finalMatch ? (finalMatch.winner_pair_id === finalMatch.pair_a_id ? finalMatch.pair_b_id : finalMatch.pair_a_id) : null)}</p>
           </div>
-          <Button
-            className="w-full bg-brand hover:bg-brand-hover text-white h-12 text-base"
-            onClick={finalizeTournament}
-            disabled={finalizing}
-          >
-            {finalizing ? "Finalizando…" : "Finalizar Torneio e Salvar Ranking"}
-          </Button>
+          {isAdmin && (
+            <Button
+              className="w-full bg-brand hover:bg-brand-hover text-white h-12 text-base"
+              onClick={finalizeTournament}
+              disabled={finalizing}
+            >
+              {finalizing ? "Finalizando…" : "Finalizar Torneio e Salvar Ranking"}
+            </Button>
+          )}
         </div>
       )}
     </div>

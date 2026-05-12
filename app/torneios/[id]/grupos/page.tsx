@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { useAuth } from "@/components/AuthProvider";
 import type { Group, GroupMatch, GroupMember, Player } from "@/lib/types/database";
 import type { PlayerStanding } from "@/lib/domain/standings";
 
@@ -45,6 +46,7 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
   const [error, setError] = useState<string | null>(null);
   const [savedIndicator, setSavedIndicator] = useState<string | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const { isAdmin } = useAuth();
 
   async function loadData() {
     const [{ data: groupRows }, { data: members }, { data: allMatches }, { data: allPlayers }] = await Promise.all([
@@ -200,7 +202,7 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
         })}
       </div>
 
-      {allDone && (
+      {isAdmin && allDone && (
         <Button
           className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-base"
           onClick={advanceToKnockout}
@@ -225,6 +227,7 @@ function GroupCard({
   onScoreChange: (id: string, a: number | null, b: number | null) => void;
   onSwapTiebreaker: (p1: PlayerStanding, p2: PlayerStanding) => void;
 }) {
+  const { isAdmin } = useAuth();
   const hasTies = gd.standings.some((s, i) => i < gd.standings.length - 1 && isTied(s, gd.standings[i + 1]));
 
   return (
@@ -259,6 +262,7 @@ function GroupCard({
                         scoreA={m.score_dupla1}
                         scoreB={m.score_dupla2}
                         onChange={(a, b) => onScoreChange(m.id, a, b)}
+                        disabled={!isAdmin}
                       />
                       {savedMatchId === m.id && (
                         <span className="absolute -top-1 -right-1 text-xs text-green-600">✓</span>
@@ -308,7 +312,7 @@ function GroupCard({
                     </td>
                     <td className="py-1 text-right font-bold">{s.points}</td>
                     <td className="py-1 pl-1 text-center">
-                      {(tiedAbove || tiedBelow) && (
+                      {isAdmin && (tiedAbove || tiedBelow) && (
                         <div className="flex flex-col items-center gap-0">
                           {tiedAbove && (
                             <button
@@ -332,7 +336,7 @@ function GroupCard({
               })}
             </tbody>
           </table>
-          {hasTies && (
+          {isAdmin && hasTies && (
             <p className="text-[10px] text-amber-600 mt-1.5">
               Empate detectado — use ↑↓ para definir a colocação manualmente.
             </p>

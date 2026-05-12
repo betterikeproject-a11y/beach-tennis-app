@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useAuth } from "@/components/AuthProvider";
 import type { Tournament } from "@/lib/types/database";
 
 const STATUS_LABEL: Record<Tournament["status"], string> = {
@@ -33,6 +34,7 @@ export function TournamentList() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     async function load() {
@@ -143,13 +145,15 @@ export function TournamentList() {
                   {STATUS_LABEL[t.status]}
                 </Badge>
               </Link>
-              <button
-                onClick={() => setDeletingId(t.id)}
-                className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
-                aria-label="Deletar torneio"
-              >
-                <Trash2 size={16} />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setDeletingId(t.id)}
+                  className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-colors"
+                  aria-label="Deletar torneio"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
             </CardContent>
           </Card>
         ))}

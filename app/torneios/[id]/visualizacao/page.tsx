@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { computeGroupStandings } from "@/lib/domain/standings";
+import { computeGroupStandings, computeOverallStandings } from "@/lib/domain/standings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { Group, GroupMatch, GroupMember, Player, KnockoutMatch, KnockoutPair, Tournament } from "@/lib/types/database";
@@ -58,6 +58,7 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [groups, setGroups] = useState<GroupData[]>([]);
   const [knockout, setKnockout] = useState<KnockoutData | null>(null);
+  const [allOverall, setAllOverall] = useState<(PlayerStanding & { groupNumber: number, position: number })[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadData() {
@@ -96,6 +97,14 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
       return { group, players, matches, standings };
     });
     setGroups(built);
+
+    const allGroupStandings = built.flatMap(gd => gd.standings.map(s => ({ ...s, groupNumber: gd.group.group_number })));
+    const overall = computeOverallStandings(allGroupStandings).map((s, i) => ({
+      ...s,
+      groupNumber: allGroupStandings.find(gs => gs.playerId === s.playerId)?.groupNumber ?? 0,
+      position: i + 1,
+    }));
+    setAllOverall(overall);
 
     if ((knockoutMatches ?? []).length > 0) {
       setKnockout({
@@ -249,6 +258,88 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
                 );
               })}
             </div>
+          </section>
+        )}
+
+        {/* Classificação Geral & Duplas Formadas */}
+        {allOverall.length > 0 && (
+          <section className="space-y-4">
+            <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide">Classificação Geral</h2>
+            <Card>
+              <CardContent className="px-3 py-3 overflow-x-auto">
+                <table className="w-full text-xs min-w-[400px]">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="text-left py-1.5 pr-1 w-6">#</th>
+                      <th className="text-left py-1.5">Jogador</th>
+                      <th className="text-center py-1.5 px-1 w-8">Gr.</th>
+                      <th className="text-center py-1.5 px-1 w-8">V</th>
+                      <th className="text-center py-1.5 px-1 w-10">G+</th>
+                      <th className="text-center py-1.5 px-1 w-10">G-</th>
+                      <th className="text-center py-1.5 px-1 w-12">Saldo</th>
+                      <th className="text-right py-1.5 pl-1 w-10">Pts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allOverall.map((s) => {
+                      const color = GROUP_COLORS[(s.groupNumber - 1) % GROUP_COLORS.length];
+                      return (
+                        <tr key={s.playerId} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                          <td className="py-1.5 pr-1 text-muted-foreground font-mono font-semibold">{s.position}</td>
+                          <td className="py-1.5 font-medium max-w-[120px] truncate">
+                            <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${color?.bg.replace('bg-', 'bg-').replace('50', '400') || 'bg-gray-400'}`}></span>
+                            {s.playerName}
+                          </td>
+                          <td className="py-1.5 px-1 text-center font-semibold">{s.groupNumber}</td>
+                          <td className="py-1.5 px-1 text-center">{s.wins}</td>
+                          <td className="py-1.5 px-1 text-center text-green-700">{s.gamesFor}</td>
+                          <td className="py-1.5 px-1 text-center text-red-500">{s.gamesAgainst}</td>
+                          <td className={`py-1.5 px-1 text-center font-medium ${s.saldo >= 0 ? "text-green-700" : "text-red-500"}`}>
+                            {s.saldo > 0 ? `+${s.saldo}` : s.saldo}
+                          </td>
+                          <td className="py-1.5 pl-1 text-right font-bold">{s.points}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+
+            {knockout && knockout.pairs.length > 0 && (
+              <div className="space-y-2 mt-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Duplas Formadas</h3>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
+                  {knockout.pairs.map((pair, idx) => {
+                    const p1 = allOverall.find(p => p.playerId === pair.player1_id);
+                    const p2 = allOverall.find(p => p.playerId === pair.player2_id);
+                    const c1 = p1 ? GROUP_COLORS[(p1.groupNumber - 1) % GROUP_COLORS.length] : null;
+                    const c2 = p2 ? GROUP_COLORS[(p2.groupNumber - 1) % GROUP_COLORS.length] : null;
+                    
+                    return (
+                      <Card key={pair.id} className="overflow-hidden">
+                        <div className="flex">
+                          <div className="bg-brand text-white flex flex-col items-center justify-center px-3 py-2 min-w-[56px]">
+                            <span className="text-[9px] font-medium opacity-80 uppercase tracking-wide">Dupla</span>
+                            <span className="text-xl font-bold leading-none">#{idx + 1}</span>
+                          </div>
+                          <div className="flex-1 divide-y">
+                            <div className={`px-3 py-1.5 text-sm font-medium flex items-center gap-2 ${c1?.bg || ''}`}>
+                              <span className={`inline-block w-2 h-2 rounded-full ${c1?.bg.replace('bg-', 'bg-').replace('50', '400') || 'bg-gray-400'}`}></span>
+                              <span className="truncate">{p1?.playerName || "?"}</span>
+                            </div>
+                            <div className={`px-3 py-1.5 text-sm font-medium flex items-center gap-2 ${c2?.bg || ''}`}>
+                              <span className={`inline-block w-2 h-2 rounded-full ${c2?.bg.replace('bg-', 'bg-').replace('50', '400') || 'bg-gray-400'}`}></span>
+                              <span className="truncate">{p2?.playerName || "?"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
