@@ -157,7 +157,7 @@ export function LeagueRanking() {
               <tr className="border-b text-muted-foreground">
                 <th className="text-left py-2 pr-2 w-8">#</th>
                 <th className="text-left py-2 flex-1">Jogador</th>
-                <th className="text-right py-2 px-2">Torneios</th>
+                <th className="text-center py-2 px-2">Torneios</th>
                 <th className="text-right py-2 pl-2 font-semibold">Pts</th>
               </tr>
             </thead>
