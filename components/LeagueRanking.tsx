@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LeagueRankingRow } from "@/lib/types/database";
+import type { PlayerPointsRow } from "@/lib/domain/ranking";
+
+type PlayerPointsRecord = PlayerPointsRow & { tournament_id: string };
 
 type TournamentPodium = {
   tournamentId: string;
@@ -17,21 +21,31 @@ type TournamentPodium = {
 export function LeagueRanking() {
   const [rows, setRows] = useState<LeagueRankingRow[]>([]);
   const [podiums, setPodiums] = useState<TournamentPodium[]>([]);
+  const [pointsHistory, setPointsHistory] = useState<PlayerPointsRecord[]>([]);
+  const [tournamentsMap, setTournamentsMap] = useState<Map<string, {name: string, date: string}>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [selectedPlayer, setSelectedPlayer] = useState<LeagueRankingRow | null>(null);
+
   useEffect(() => {
     async function load() {
-      const [{ data: rankingData, error: rankingErr }, { data: finishedTournaments }] = await Promise.all([
+      const [{ data: rankingData, error: rankingErr }, { data: finishedTournaments }, { data: pointsData }] = await Promise.all([
         supabase.from("league_ranking").select("*").order("total_pts", { ascending: false }),
         supabase.from("tournaments").select("id, name, date").eq("status", "finalizado").order("date", { ascending: false }),
+        supabase.from("tournament_player_points").select("*"),
       ]);
 
       if (rankingErr) { setError(rankingErr.message); setLoading(false); return; }
       setRows(rankingData ?? []);
+      setPointsHistory(pointsData ?? []);
 
       const tournaments = finishedTournaments ?? [];
       if (tournaments.length === 0) { setLoading(false); return; }
+
+      const tMap = new Map();
+      for (const t of tournaments) tMap.set(t.id, { name: t.name, date: t.date });
+      setTournamentsMap(tMap);
 
       const tIds = tournaments.map((t) => t.id);
 
@@ -144,17 +158,19 @@ export function LeagueRanking() {
                 <th className="text-left py-2 pr-2 w-8">#</th>
                 <th className="text-left py-2 flex-1">Jogador</th>
                 <th className="text-right py-2 px-2">Torneios</th>
-                <th className="text-right py-2 px-2">V</th>
                 <th className="text-right py-2 pl-2 font-semibold">Pts</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.player_name_normalized} className="border-b last:border-0">
+                <tr
+                  key={r.player_name_normalized}
+                  className="border-b last:border-0 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setSelectedPlayer(r)}
+                >
                   <td className="py-2 pr-2 text-muted-foreground font-mono">{i + 1}</td>
                   <td className="py-2 font-medium">{r.player_display_name}</td>
                   <td className="py-2 px-2 text-center text-muted-foreground">{r.total_participacoes}</td>
-                  <td className="py-2 px-2 text-center text-muted-foreground">{r.total_vitorias}</td>
                   <td className="py-2 pl-2 text-right font-bold text-brand">{r.total_pts}</td>
                 </tr>
               ))}
@@ -162,6 +178,66 @@ export function LeagueRanking() {
           </table>
         </div>
       </div>
+
+      <Dialog open={selectedPlayer !== null} onOpenChange={(open) => !open && setSelectedPlayer(null)}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-brand">{selectedPlayer?.player_display_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-brand-light/30 rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Torneios</p>
+                <p className="text-2xl font-bold">{selectedPlayer?.total_participacoes}</p>
+              </div>
+              <div className="bg-brand-light/30 rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Pontos Totais</p>
+                <p className="text-2xl font-bold text-brand">{selectedPlayer?.total_pts}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mt-4">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Histórico de Pontos</h3>
+              {selectedPlayer && pointsHistory
+                .filter(p => p.player_name === selectedPlayer.player_name_normalized)
+                .map((history, idx) => {
+                  const tInfo = tournamentsMap.get(history.tournament_id);
+                  if (!tInfo) return null;
+                  return (
+                    <Card key={idx} className="overflow-hidden shadow-sm">
+                      <CardHeader className="py-2 px-3 bg-muted/30 border-b">
+                        <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                          <span>{tInfo.name}</span>
+                          <span className="text-xs font-normal text-muted-foreground">
+                            {new Date(tInfo.date + "T12:00:00").toLocaleDateString("pt-BR")}
+                          </span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="py-3 px-3 text-sm">
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-muted-foreground">Participação</span>
+                          <span className="font-medium">+{history.pts_participacao}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-muted-foreground">Vitórias (Grupos: {history.vitorias_grupo})</span>
+                          <span className="font-medium">+{history.pts_vitorias}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-muted-foreground">Eliminatórias</span>
+                          <span className="font-medium">+{history.pts_eliminatorias}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 mt-2 border-t">
+                          <span className="font-semibold">Total</span>
+                          <span className="font-bold text-brand">+{history.total_pts}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+              })}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
