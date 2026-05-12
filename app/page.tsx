@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TournamentList } from "@/components/TournamentList";
 import { LeagueRanking } from "@/components/LeagueRanking";
-import { useAuth } from "@/components/AuthProvider";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
-export default function HomePage() {
-  const { isAdmin } = useAuth();
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const isAdmin = cookieStore.get("admin_token")?.value === "true";
 
   return (
     <div className="space-y-6">
