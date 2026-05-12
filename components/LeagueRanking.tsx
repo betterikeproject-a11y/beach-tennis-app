@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LeagueRankingRow } from "@/lib/types/database";
-import type { PlayerPointsRow } from "@/lib/domain/ranking";
+import { DEFAULT_POINTS_CONFIG, type PlayerPointsRow } from "@/lib/domain/ranking";
 
 type PlayerPointsRecord = PlayerPointsRow & { tournament_id: string };
 
@@ -223,7 +223,13 @@ export function LeagueRanking() {
                           <span className="font-medium">+{history.pts_vitorias}</span>
                         </div>
                         <div className="flex justify-between items-center py-1">
-                          <span className="text-muted-foreground">Eliminatórias</span>
+                          <span className="text-muted-foreground">
+                            {history.pts_eliminatorias === DEFAULT_POINTS_CONFIG.pts_campeao ? "Eliminatórias (Campeão)" :
+                             history.pts_eliminatorias === DEFAULT_POINTS_CONFIG.pts_vice ? "Eliminatórias (Vice-Campeão)" :
+                             history.pts_eliminatorias === DEFAULT_POINTS_CONFIG.pts_semis ? "Eliminatórias (Semifinal)" :
+                             history.pts_eliminatorias === DEFAULT_POINTS_CONFIG.pts_quartas ? "Eliminatórias (Quartas)" :
+                             "Eliminatórias"}
+                          </span>
                           <span className="font-medium">+{history.pts_eliminatorias}</span>
                         </div>
                         <div className="flex justify-between items-center pt-2 mt-2 border-t">
