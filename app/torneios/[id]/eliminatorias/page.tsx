@@ -215,26 +215,59 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
             .map((m) => (
               <Card key={m.id} className={m.winner_pair_id ? "bg-green-50 border-green-200" : ""}>
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <p className={`text-sm font-medium truncate ${m.winner_pair_id === m.pair_a_id ? "text-green-700 font-bold" : ""}`}>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className={`text-sm leading-tight ${m.winner_pair_id === m.pair_a_id ? "text-green-700 font-bold" : "font-medium"}`}>
                         {pairName(m.pair_a_id)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">vs</p>
-                      <p className={`text-sm font-medium truncate ${m.winner_pair_id === m.pair_b_id ? "text-green-700 font-bold" : ""}`}>
-                        {pairName(m.pair_b_id)}
-                      </p>
+                      </div>
+                      {m.pair_a_id && m.pair_b_id ? (
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={7}
+                          value={m.score_a ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                            if (v !== null && (v < 0 || v > 7)) return;
+                            handleScoreChange(m, v, m.score_b);
+                          }}
+                          disabled={!isAdmin}
+                          className="w-12 h-10 text-center text-base font-mono border rounded-md focus:outline-none focus:ring-2 focus:ring-brand bg-white disabled:bg-gray-50 shrink-0"
+                          placeholder="–"
+                        />
+                      ) : (
+                        <div className="w-12 h-10 border rounded-md bg-gray-50 flex items-center justify-center shrink-0">
+                          <span className="text-muted-foreground">-</span>
+                        </div>
+                      )}
                     </div>
-                    {m.pair_a_id && m.pair_b_id ? (
-                      <ScoreInput
-                        scoreA={m.score_a}
-                        scoreB={m.score_b}
-                        onChange={(a, b) => handleScoreChange(m, a, b)}
-                        disabled={!isAdmin}
-                      />
-                    ) : (
-                      <span className="text-sm text-muted-foreground italic">Aguardando</span>
-                    )}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className={`text-sm leading-tight ${m.winner_pair_id === m.pair_b_id ? "text-green-700 font-bold" : "font-medium"}`}>
+                        {pairName(m.pair_b_id)}
+                      </div>
+                      {m.pair_a_id && m.pair_b_id ? (
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={7}
+                          value={m.score_b ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                            if (v !== null && (v < 0 || v > 7)) return;
+                            handleScoreChange(m, m.score_a, v);
+                          }}
+                          disabled={!isAdmin}
+                          className="w-12 h-10 text-center text-base font-mono border rounded-md focus:outline-none focus:ring-2 focus:ring-brand bg-white disabled:bg-gray-50 shrink-0"
+                          placeholder="–"
+                        />
+                      ) : (
+                        <div className="w-12 h-10 border rounded-md bg-gray-50 flex items-center justify-center shrink-0">
+                          <span className="text-muted-foreground">-</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>

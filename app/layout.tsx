@@ -21,7 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className={`${inter.className} bg-gray-50 min-h-screen`}>
         <AuthProvider isAdmin={isAdmin}>
           <header className="border-b px-4 py-3 bg-white sticky top-0 z-40 shadow-sm relative">
-            <div className="flex justify-center">
+            <div className="flex justify-center max-w-4xl mx-auto relative">
               <a href="/" className="flex flex-col items-center gap-1.5 py-1">
                 <Image src="/logo.jpeg" alt="Jurerê Beach Sports" width={44} height={44} className="rounded-full shadow-sm" />
                 <span className="font-bold text-base text-brand tracking-tight leading-tight text-center">
@@ -33,7 +33,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <LoginDialog />
             </div>
           </header>
-          <main className="max-w-2xl mx-auto px-4 py-6">{children}</main>
+          <main className="max-w-4xl mx-auto px-4 py-6">{children}</main>
           <Toaster position="top-center" richColors />
         </AuthProvider>
       </body>

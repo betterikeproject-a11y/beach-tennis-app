@@ -249,24 +249,49 @@ function GroupCard({
                 .map((pid) => gd.players.find((p) => p.id === pid)?.name ?? pid)
                 .join(" / ");
               return (
-                <div key={m.id} className="rounded-lg border p-3 space-y-2 bg-white">
-                  <div className="text-xs text-muted-foreground">Jogo {m.match_number}</div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{d1}</div>
-                      <div className="text-xs text-muted-foreground">×</div>
-                      <div className="text-sm font-medium truncate">{d2}</div>
-                    </div>
-                    <div className="relative">
-                      <ScoreInput
-                        scoreA={m.score_dupla1}
-                        scoreB={m.score_dupla2}
-                        onChange={(a, b) => onScoreChange(m.id, a, b)}
+                <div key={m.id} className="rounded-lg border p-3 space-y-3 bg-white relative">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground font-medium">Jogo {m.match_number}</div>
+                    {savedMatchId === m.id && (
+                      <span className="text-xs text-green-600 font-bold">✓ Salvo</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium leading-tight">{d1}</div>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={7}
+                        value={m.score_dupla1 ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                          if (v !== null && (v < 0 || v > 7)) return;
+                          onScoreChange(m.id, v, m.score_dupla2);
+                        }}
                         disabled={!isAdmin}
+                        className="w-12 h-10 text-center text-base font-mono border rounded-md focus:outline-none focus:ring-2 focus:ring-brand bg-white disabled:bg-gray-50 shrink-0"
+                        placeholder="–"
                       />
-                      {savedMatchId === m.id && (
-                        <span className="absolute -top-1 -right-1 text-xs text-green-600">✓</span>
-                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium leading-tight">{d2}</div>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={7}
+                        value={m.score_dupla2 ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                          if (v !== null && (v < 0 || v > 7)) return;
+                          onScoreChange(m.id, m.score_dupla1, v);
+                        }}
+                        disabled={!isAdmin}
+                        className="w-12 h-10 text-center text-base font-mono border rounded-md focus:outline-none focus:ring-2 focus:ring-brand bg-white disabled:bg-gray-50 shrink-0"
+                        placeholder="–"
+                      />
                     </div>
                   </div>
                 </div>
