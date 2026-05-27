@@ -5,8 +5,16 @@ export type TournamentStatus = "draft" | "grupos" | "eliminatorias" | "finalizad
 export type MatchStatus = "pendente" | "concluido";
 export type KnockoutPhase = "quartas" | "semis" | "final" | "terceiro";
 
+export interface Ranking {
+  id: string;
+  name: string;
+  is_archived: boolean;
+  created_at: string;
+}
+
 export interface Tournament {
   id: string;
+  ranking_id: string;
   name: string;
   date: string;
   status: TournamentStatus;
@@ -73,7 +81,7 @@ export interface KnockoutMatch {
 }
 
 export interface LeagueRankingPointsConfig {
-  id: 1;
+  ranking_id: string;
   pts_participacao: number;
   pts_por_vitoria_grupo: number;
   pts_quartas: number;
@@ -97,6 +105,7 @@ export interface TournamentPlayerPoints {
 }
 
 export interface LeagueRankingRow {
+  ranking_id: string;
   player_name_normalized: string;
   player_display_name: string;
   total_participacoes: number;
@@ -109,6 +118,7 @@ export interface LeagueRankingRow {
 export type Database = {
   public: {
     Tables: {
+      rankings: { Row: Ranking; Insert: Omit<Ranking, "id" | "created_at">; Update: Partial<Ranking> };
       tournaments: { Row: Tournament; Insert: Omit<Tournament, "id" | "created_at">; Update: Partial<Tournament> };
       players: { Row: Player; Insert: Omit<Player, "id" | "created_at">; Update: Partial<Player> };
       groups: { Row: Group; Insert: Omit<Group, "id">; Update: Partial<Group> };

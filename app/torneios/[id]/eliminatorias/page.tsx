@@ -120,7 +120,25 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
   async function finalizeTournament() {
     setFinalizing(true);
     try {
-      const config = DEFAULT_POINTS_CONFIG; // TODO: load from DB
+      // Load ranking_id for this tournament
+      const { data: tournamentData, error: tournamentErr } = await supabase
+        .from("tournaments")
+        .select("ranking_id")
+        .eq("id", id)
+        .single();
+
+      if (tournamentErr || !tournamentData) {
+        throw new Error(tournamentErr?.message || "Torneio não encontrado");
+      }
+
+      // Load point config for this ranking
+      const { data: dbConfig } = await supabase
+        .from("league_ranking_points_config")
+        .select("*")
+        .eq("ranking_id", tournamentData.ranking_id)
+        .single();
+
+      const config = dbConfig || DEFAULT_POINTS_CONFIG;
 
       // Get group stats
       const [{ data: groups }, { data: members }, { data: groupMatchData }] = await Promise.all([

@@ -1,6 +1,6 @@
--- Seed: insert the default points config singleton.
+-- Seed: insert the default ranking "Geral".
 -- Run once after schema.sql.
 
-INSERT INTO league_ranking_points_config (id)
-VALUES (1)
+INSERT INTO rankings (id, name)
+VALUES ('d3b07384-d113-4ec5-a5d7-be96cf5910fa', 'Masculino B/C')
 ON CONFLICT (id) DO NOTHING;

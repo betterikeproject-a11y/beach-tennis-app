@@ -27,7 +27,7 @@ const STATUS_COLOR: Record<Tournament["status"], string> = {
   finalizado: "bg-green-100 text-green-700",
 };
 
-export function TournamentList() {
+export function TournamentList({ rankingId }: { rankingId: string }) {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -42,6 +42,7 @@ export function TournamentList() {
       const { data, error } = await supabase
         .from("tournaments")
         .select("*")
+        .eq("ranking_id", rankingId)
         .order("date", { ascending: false });
 
       if (error) { setError(error.message); setLoading(false); return; }
@@ -62,7 +63,7 @@ export function TournamentList() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [rankingId]);
 
   async function handleDelete() {
     if (!deletingId) return;

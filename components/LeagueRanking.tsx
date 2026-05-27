@@ -18,7 +18,7 @@ type TournamentPodium = {
   vice: [string, string];
 };
 
-export function LeagueRanking() {
+export function LeagueRanking({ rankingId }: { rankingId: string }) {
   const [rows, setRows] = useState<LeagueRankingRow[]>([]);
   const [podiums, setPodiums] = useState<TournamentPodium[]>([]);
   const [pointsHistory, setPointsHistory] = useState<PlayerPointsRecord[]>([]);
@@ -29,16 +29,21 @@ export function LeagueRanking() {
   const [selectedPlayer, setSelectedPlayer] = useState<LeagueRankingRow | null>(null);
 
   useEffect(() => {
+    setLoading(true);
+    setRows([]);
+    setPodiums([]);
+    setPointsHistory([]);
+    setTournamentsMap(new Map());
+    setError(null);
+
     async function load() {
-      const [{ data: rankingData, error: rankingErr }, { data: finishedTournaments }, { data: pointsData }] = await Promise.all([
-        supabase.from("league_ranking").select("*").order("total_pts", { ascending: false }),
-        supabase.from("tournaments").select("id, name, date").eq("status", "finalizado").order("date", { ascending: false }),
-        supabase.from("tournament_player_points").select("*"),
+      const [{ data: rankingData, error: rankingErr }, { data: finishedTournaments }] = await Promise.all([
+        supabase.from("league_ranking").select("*").eq("ranking_id", rankingId).order("total_pts", { ascending: false }),
+        supabase.from("tournaments").select("id, name, date").eq("status", "finalizado").eq("ranking_id", rankingId).order("date", { ascending: false }),
       ]);
 
       if (rankingErr) { setError(rankingErr.message); setLoading(false); return; }
       setRows(rankingData ?? []);
-      setPointsHistory(pointsData ?? []);
 
       const tournaments = finishedTournaments ?? [];
       if (tournaments.length === 0) { setLoading(false); return; }
@@ -49,11 +54,14 @@ export function LeagueRanking() {
 
       const tIds = tournaments.map((t) => t.id);
 
-      const [{ data: finalMatches }, { data: allPairs }, { data: allPlayers }] = await Promise.all([
+      const [{ data: pointsData }, { data: finalMatches }, { data: allPairs }, { data: allPlayers }] = await Promise.all([
+        supabase.from("tournament_player_points").select("*").in("tournament_id", tIds),
         supabase.from("knockout_matches").select("tournament_id, pair_a_id, pair_b_id, winner_pair_id").in("tournament_id", tIds).eq("phase", "final").not("winner_pair_id", "is", null),
         supabase.from("knockout_pairs").select("id, tournament_id, player1_id, player2_id").in("tournament_id", tIds),
         supabase.from("players").select("id, name").in("tournament_id", tIds),
       ]);
+
+      setPointsHistory(pointsData ?? []);
 
       const pairsMap = new Map((allPairs ?? []).map((p) => [p.id, p]));
       const playersMap = new Map((allPlayers ?? []).map((p) => [p.id, p.name]));
@@ -89,7 +97,7 @@ export function LeagueRanking() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [rankingId]);
 
   if (error) {
     return (

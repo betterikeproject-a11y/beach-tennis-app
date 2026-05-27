@@ -25,11 +25,24 @@ CREATE TYPE knockout_phase    AS ENUM ('quartas', 'semis', 'final', 'terceiro');
 
 
 -- ============================================================
+-- RANKINGS
+-- ============================================================
+
+CREATE TABLE rankings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL UNIQUE,
+  is_archived BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+-- ============================================================
 -- TOURNAMENTS
 -- ============================================================
 
 CREATE TABLE tournaments (
   id                           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ranking_id                   UUID NOT NULL REFERENCES rankings(id) ON DELETE CASCADE,
   name                         TEXT NOT NULL,
   date                         DATE NOT NULL,
   status                       tournament_status NOT NULL DEFAULT 'draft',
@@ -170,12 +183,11 @@ CREATE TRIGGER trg_knockout_matches_updated_at
 
 
 -- ============================================================
--- LEAGUE RANKING POINTS CONFIG  (singleton — exactly one row)
--- Insert the default row in seed.sql.
+-- LEAGUE RANKING POINTS CONFIG
 -- ============================================================
 
 CREATE TABLE league_ranking_points_config (
-  id                    INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),  -- enforces singleton
+  ranking_id            UUID PRIMARY KEY REFERENCES rankings(id) ON DELETE CASCADE,
   pts_participacao      INTEGER NOT NULL DEFAULT 30,
   pts_por_vitoria_grupo INTEGER NOT NULL DEFAULT 20,
   pts_quartas           INTEGER NOT NULL DEFAULT 60,
@@ -188,6 +200,35 @@ CREATE TABLE league_ranking_points_config (
 CREATE TRIGGER trg_config_updated_at
   BEFORE UPDATE ON league_ranking_points_config
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Automatically create default points configuration when a new ranking is created
+CREATE OR REPLACE FUNCTION public.handle_new_ranking()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.league_ranking_points_config (
+    ranking_id,
+    pts_participacao,
+    pts_por_vitoria_grupo,
+    pts_quartas,
+    pts_semis,
+    pts_vice,
+    pts_campeao
+  ) VALUES (
+    NEW.id,
+    30,
+    20,
+    60,
+    80,
+    110,
+    140
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER on_ranking_created
+  AFTER INSERT ON public.rankings
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_ranking();
 
 
 -- ============================================================
@@ -220,21 +261,23 @@ CREATE INDEX idx_tpp_player_name   ON tournament_player_points(player_name);
 -- ============================================================
 -- LEAGUE RANKING  (view — no materialization needed at MVP scale)
 -- Aggregates all finalized tournament points by normalized name.
--- The UI can ORDER BY total_pts DESC client-side if preferred.
+-- Grouped by ranking_id.
 -- ============================================================
 
 CREATE VIEW league_ranking AS
 SELECT
-  player_name                            AS player_name_normalized,
+  t.ranking_id,
+  tpp.player_name                            AS player_name_normalized,
   -- Use the most recently computed display name for each normalized key
-  (ARRAY_AGG(player_display_name ORDER BY computed_at DESC))[1]
-                                         AS player_display_name,
-  COUNT(DISTINCT tournament_id)          AS total_participacoes,
-  SUM(vitorias_grupo)                    AS total_vitorias,
-  SUM(pts_eliminatorias)                 AS total_pts_eliminatorias,
-  SUM(total_pts)                         AS total_pts
-FROM tournament_player_points
-GROUP BY player_name;
+  (ARRAY_AGG(tpp.player_display_name ORDER BY tpp.computed_at DESC))[1]
+                                             AS player_display_name,
+  COUNT(DISTINCT tpp.tournament_id)          AS total_participacoes,
+  SUM(tpp.vitorias_grupo)                    AS total_vitorias,
+  SUM(tpp.pts_eliminatorias)                 AS total_pts_eliminatorias,
+  SUM(tpp.total_pts)                         AS total_pts
+FROM tournament_player_points tpp
+JOIN tournaments t ON tpp.tournament_id = t.id
+GROUP BY t.ranking_id, tpp.player_name;
 
 
 -- ============================================================

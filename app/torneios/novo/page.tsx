@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect, KeyboardEvent, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,31 +9,54 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { normalizeName } from "@/lib/domain/ranking";
 import { toast } from "sonner";
-import type { LeagueRankingRow } from "@/lib/types/database";
+import type { LeagueRankingRow, Ranking } from "@/lib/types/database";
 
 type PlayerEntry = { name: string; isSeed: boolean };
 
-export default function NovoTorneioPage() {
+function NovoTorneioContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryRankingId = searchParams.get("rankingId") || "";
+
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [playerInput, setPlayerInput] = useState("");
   const [players, setPlayers] = useState<PlayerEntry[]>([]);
   const [saving, setSaving] = useState(false);
+  const [rankings, setRankings] = useState<Ranking[]>([]);
+  const [selectedRankingId, setSelectedRankingId] = useState<string>("");
   const [pastPlayers, setPastPlayers] = useState<LeagueRankingRow[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const MIN = 12, MAX = 32;
   const count = players.length;
-  const canSubmit = name.trim() && date && count >= MIN && count <= MAX;
+  const canSubmit = name.trim() && date && selectedRankingId && count >= MIN && count <= MAX;
 
   useEffect(() => {
     supabase
+      .from("rankings")
+      .select("*")
+      .order("name")
+      .then(({ data }) => {
+        if (data) {
+          setRankings(data);
+          const defaultId = queryRankingId && data.some((r) => r.id === queryRankingId)
+            ? queryRankingId
+            : (data.find((r) => r.name.toLowerCase() === "geral")?.id || data[0]?.id || "");
+          setSelectedRankingId(defaultId);
+        }
+      });
+  }, [queryRankingId]);
+
+  useEffect(() => {
+    if (!selectedRankingId) return;
+    supabase
       .from("league_ranking")
       .select("*")
+      .eq("ranking_id", selectedRankingId)
       .order("total_pts", { ascending: false })
       .then(({ data }) => setPastPlayers(data ?? []));
-  }, []);
+  }, [selectedRankingId]);
 
   // Suggestions: past players not yet added, filtered by what's being typed
   const addedNormalized = new Set(players.map((p) => normalizeName(p.name)));
@@ -106,7 +129,14 @@ export default function NovoTorneioPage() {
     try {
       const { data: tournament, error: te } = await supabase
         .from("tournaments")
-        .insert({ name: name.trim(), date, status: "draft", num_classificados_por_grupo: 3, usar_cabecas_de_chave: false })
+        .insert({
+          name: name.trim(),
+          date,
+          status: "draft",
+          num_classificados_por_grupo: 3,
+          usar_cabecas_de_chave: false,
+          ranking_id: selectedRankingId
+        })
         .select("id")
         .single();
       if (te || !tournament) throw te ?? new Error("Falha ao criar torneio");
@@ -137,6 +167,21 @@ export default function NovoTorneioPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Informações</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <Label htmlFor="ranking">Ranking</Label>
+            <select
+              id="ranking"
+              value={selectedRankingId}
+              onChange={(e) => setSelectedRankingId(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand shadow-sm cursor-pointer"
+            >
+              {rankings.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="space-y-1">
             <Label htmlFor="name">Nome do torneio</Label>
             <Input
@@ -280,5 +325,13 @@ export default function NovoTorneioPage() {
         {saving ? "Salvando…" : "Continuar → Sortear Grupos"}
       </Button>
     </div>
+  );
+}
+
+export default function NovoTorneioPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-12 text-muted-foreground">Carregando formulário…</div>}>
+      <NovoTorneioContent />
+    </Suspense>
   );
 }
