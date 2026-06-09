@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
+import { EditPlayerDialog } from "@/components/EditPlayerDialog";
 import type { Group, GroupMatch, GroupMember, Player } from "@/lib/types/database";
 import type { PlayerStanding } from "@/lib/domain/standings";
 
@@ -47,6 +48,17 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
   const [savedIndicator, setSavedIndicator] = useState<string | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const { isAdmin } = useAuth();
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+
+  const handlePlayerClick = (playerId: string) => {
+    for (const gd of groups) {
+      const found = gd.players.find((p) => p.id === playerId);
+      if (found) {
+        setSelectedPlayer(found);
+        break;
+      }
+    }
+  };
 
   async function loadData() {
     const [{ data: groupRows }, { data: members }, { data: allMatches }, { data: allPlayers }] = await Promise.all([
@@ -197,6 +209,7 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
               colorClasses={color}
               onScoreChange={handleScoreChange}
               onSwapTiebreaker={(p1, p2) => handleSwapTiebreaker(gd.group.id, p1, p2)}
+              onPlayerClick={handlePlayerClick}
             />
           );
         })}
@@ -210,6 +223,13 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
           Avançar para Eliminatórias →
         </Button>
       )}
+
+      <EditPlayerDialog
+        player={selectedPlayer}
+        isOpen={selectedPlayer !== null}
+        onClose={() => setSelectedPlayer(null)}
+        onSaved={loadData}
+      />
     </div>
   );
 }
@@ -220,12 +240,14 @@ function GroupCard({
   colorClasses,
   onScoreChange,
   onSwapTiebreaker,
+  onPlayerClick,
 }: {
   gd: GroupData;
   savedMatchId: string | null;
   colorClasses: { border: string; title: string };
   onScoreChange: (id: string, a: number | null, b: number | null) => void;
   onSwapTiebreaker: (p1: PlayerStanding, p2: PlayerStanding) => void;
+  onPlayerClick: (playerId: string) => void;
 }) {
   const { isAdmin } = useAuth();
   const hasTies = gd.standings.some((s, i) => i < gd.standings.length - 1 && isTied(s, gd.standings[i + 1]));
@@ -242,12 +264,24 @@ function GroupCard({
             .slice()
             .sort((a, b) => a.match_number - b.match_number)
             .map((m) => {
-              const d1 = [m.dupla1_player1_id, m.dupla1_player2_id]
-                .map((pid) => gd.players.find((p) => p.id === pid)?.name ?? pid)
-                .join(" / ");
-              const d2 = [m.dupla2_player1_id, m.dupla2_player2_id]
-                .map((pid) => gd.players.find((p) => p.id === pid)?.name ?? pid)
-                .join(" / ");
+              const p1_1 = gd.players.find((p) => p.id === m.dupla1_player1_id);
+              const p1_2 = gd.players.find((p) => p.id === m.dupla1_player2_id);
+              const p2_1 = gd.players.find((p) => p.id === m.dupla2_player1_id);
+              const p2_2 = gd.players.find((p) => p.id === m.dupla2_player2_id);
+
+              const renderPlayerLink = (player: Player | undefined, fallbackId: string) => {
+                if (!player) return fallbackId;
+                return (
+                  <span
+                    onClick={() => isAdmin && onPlayerClick(player.id)}
+                    className={isAdmin ? "cursor-pointer hover:underline text-brand hover:text-brand-hover font-semibold" : ""}
+                    title={isAdmin ? "Clique para editar jogador" : undefined}
+                  >
+                    {player.name}
+                  </span>
+                );
+              };
+
               return (
                 <div key={m.id} className="rounded-lg border p-3 space-y-3 bg-white relative">
                   <div className="flex items-center justify-between">
@@ -258,7 +292,9 @@ function GroupCard({
                   </div>
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium leading-tight">{d1}</div>
+                      <div className="text-sm font-medium leading-tight">
+                        {renderPlayerLink(p1_1, m.dupla1_player1_id)} {" / "} {renderPlayerLink(p1_2, m.dupla1_player2_id)}
+                      </div>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -276,7 +312,9 @@ function GroupCard({
                       />
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium leading-tight">{d2}</div>
+                      <div className="text-sm font-medium leading-tight">
+                        {renderPlayerLink(p2_1, m.dupla2_player1_id)} {" / "} {renderPlayerLink(p2_2, m.dupla2_player2_id)}
+                      </div>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -325,7 +363,13 @@ function GroupCard({
                 return (
                   <tr key={s.playerId} className="border-b last:border-0">
                     <td className="py-1 pr-1 text-muted-foreground font-mono font-medium">{s.position}</td>
-                    <td className="py-1 font-medium truncate max-w-[90px]">
+                    <td
+                      onClick={() => isAdmin && onPlayerClick(s.playerId)}
+                      className={`py-1 font-medium truncate max-w-[90px] ${
+                        isAdmin ? "cursor-pointer hover:underline text-brand hover:text-brand-hover" : ""
+                      }`}
+                      title={isAdmin ? "Editar jogador" : undefined}
+                    >
                       {s.playerName}
                       {isManual && <span className="ml-0.5 text-[9px] text-amber-500" title="Posição definida manualmente">✎</span>}
                     </td>

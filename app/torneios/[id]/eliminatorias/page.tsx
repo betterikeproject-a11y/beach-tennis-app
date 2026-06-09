@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
+import { EditPlayerDialog } from "@/components/EditPlayerDialog";
 import type { KnockoutMatch, KnockoutPair, Player, Group, GroupMatch } from "@/lib/types/database";
 import type { KnockoutPhase } from "@/lib/domain/bracket";
 
@@ -32,6 +33,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [finalizing, setFinalizing] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const { isAdmin } = useAuth();
 
@@ -64,6 +66,33 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
     const p1 = players.find((p) => p.id === pair.player1_id)?.name ?? "?";
     const p2 = players.find((p) => p.id === pair.player2_id)?.name ?? "?";
     return `${p1} / ${p2}`;
+  }
+
+  function renderPair(pairId: string | null) {
+    if (!pairId) return <span className="text-muted-foreground">A definir</span>;
+    const pair = pairs.find((p) => p.id === pairId);
+    if (!pair) return <span className="text-muted-foreground">A definir</span>;
+    const p1 = players.find((p) => p.id === pair.player1_id);
+    const p2 = players.find((p) => p.id === pair.player2_id);
+
+    const renderPlayerLink = (player: Player | undefined, fallbackName: string) => {
+      if (!player) return <span>{fallbackName}</span>;
+      return (
+        <span
+          onClick={() => isAdmin && setSelectedPlayer(player)}
+          className={isAdmin ? "cursor-pointer hover:underline text-brand hover:text-brand-hover font-semibold" : ""}
+          title={isAdmin ? "Clique para editar jogador" : undefined}
+        >
+          {player.name}
+        </span>
+      );
+    };
+
+    return (
+      <>
+        {renderPlayerLink(p1, "?")} {" / "} {renderPlayerLink(p2, "?")}
+      </>
+    );
   }
 
   const saveScore = useCallback(async (match: KnockoutMatch, scoreA: number | null, scoreB: number | null) => {
@@ -109,9 +138,12 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
   }, [matches, pairs, id]);
 
   function handleScoreChange(match: KnockoutMatch, a: number | null, b: number | null) {
-    clearTimeout(debounceTimers.current[match.id]);
+    const timerId = String(match.id);
+    if (debounceTimers.current[timerId]) {
+      clearTimeout(debounceTimers.current[timerId]);
+    }
     setMatches((prev) => prev.map((m) => m.id === match.id ? { ...m, score_a: a, score_b: b } : m));
-    debounceTimers.current[match.id] = setTimeout(() => saveScore(match, a, b), 500);
+    debounceTimers.current[timerId] = setTimeout(() => saveScore(match, a, b), 500);
   }
 
   const finalMatch = matches.find((m) => m.phase === "final");
@@ -237,7 +269,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className={`text-sm leading-tight ${m.winner_pair_id === m.pair_a_id ? "text-green-700 font-bold" : "font-medium"}`}>
-                        {pairName(m.pair_a_id)}
+                        {renderPair(m.pair_a_id)}
                       </div>
                       {m.pair_a_id && m.pair_b_id ? (
                         <input
@@ -263,7 +295,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <div className={`text-sm leading-tight ${m.winner_pair_id === m.pair_b_id ? "text-green-700 font-bold" : "font-medium"}`}>
-                        {pairName(m.pair_b_id)}
+                        {renderPair(m.pair_b_id)}
                       </div>
                       {m.pair_a_id && m.pair_b_id ? (
                         <input
@@ -299,8 +331,8 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
         <div className="rounded-lg bg-brand-light border border-brand/30 p-4 text-center space-y-3">
           <p className="text-3xl">🏆</p>
           <div className="space-y-1">
-            <p className="font-bold text-lg text-brand">Campeão: {pairName(finalMatch?.winner_pair_id ?? null)}</p>
-            <p className="text-sm font-medium text-muted-foreground">Vice: {pairName(finalMatch ? (finalMatch.winner_pair_id === finalMatch.pair_a_id ? finalMatch.pair_b_id : finalMatch.pair_a_id) : null)}</p>
+            <p className="font-bold text-lg text-brand">Campeão: {renderPair(finalMatch?.winner_pair_id ?? null)}</p>
+            <p className="text-sm font-medium text-muted-foreground">Vice: {renderPair(finalMatch ? (finalMatch.winner_pair_id === finalMatch.pair_a_id ? finalMatch.pair_b_id : finalMatch.pair_a_id) : null)}</p>
           </div>
           {isAdmin && (
             <Button
@@ -312,6 +344,14 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
             </Button>
           )}
         </div>
+      )}
+      {isAdmin && (
+        <EditPlayerDialog
+          player={selectedPlayer}
+          isOpen={selectedPlayer !== null}
+          onClose={() => setSelectedPlayer(null)}
+          onSaved={loadData}
+        />
       )}
     </div>
   );

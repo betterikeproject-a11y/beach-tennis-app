@@ -8,6 +8,8 @@ import { generateBracket, suggestStartingPhase } from "@/lib/domain/bracket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAuth } from "@/components/AuthProvider";
+import { EditPlayerDialog } from "@/components/EditPlayerDialog";
 import type { Player, Group, GroupMatch } from "@/lib/types/database";
 import type { PlayerStanding } from "@/lib/domain/standings";
 
@@ -26,43 +28,49 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
   const [editingSlot, setEditingSlot] = useState<{ pairIdx: number; slot: 0 | 1 } | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const { isAdmin } = useAuth();
+
+  async function loadData() {
+    const [{ data: groups }, { data: members }, { data: matches }, { data: players }] = await Promise.all([
+      supabase.from("groups").select("*").eq("tournament_id", id).order("group_number"),
+      supabase.from("group_members").select("*"),
+      supabase.from("group_matches").select("*"),
+      supabase.from("players").select("*").eq("tournament_id", id),
+    ]);
+
+    setPlayers(players ?? []);
+
+    const groupRows = groups ?? [];
+    const allPlayers = players ?? [];
+
+    const perGroupStandings = groupRows.map((g: Group) => {
+      const groupMembers = (members ?? []).filter((m) => m.group_id === g.id);
+      const memberIds = groupMembers.map((m) => m.player_id);
+      const gPlayers = allPlayers.filter((p: Player) => memberIds.includes(p.id));
+      const gMatches = (matches ?? []).filter((m: GroupMatch) => m.group_id === g.id);
+      const overrides: Record<string, number | null> = {};
+      for (const gm of groupMembers) overrides[gm.player_id] = gm.position_override;
+      const standings = computeGroupStandings(
+        gPlayers.map((p: Player) => ({ id: p.id, name: p.name })),
+        gMatches,
+        overrides
+      );
+      return standings.map((s) => ({ ...s, groupNumber: g.group_number }));
+    });
+
+    const overall = computeOverallStandings(perGroupStandings).map((s, i) => ({
+      ...s,
+      groupNumber: perGroupStandings.flat().find((ps) => ps.playerId === s.playerId)?.groupNumber ?? 0,
+      position: i + 1,
+    }));
+    setAllOverall(overall);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function load() {
-      const [{ data: groups }, { data: members }, { data: matches }, { data: players }] = await Promise.all([
-        supabase.from("groups").select("*").eq("tournament_id", id).order("group_number"),
-        supabase.from("group_members").select("*"),
-        supabase.from("group_matches").select("*"),
-        supabase.from("players").select("*").eq("tournament_id", id),
-      ]);
-
-      const groupRows = groups ?? [];
-      const allPlayers = players ?? [];
-
-      const perGroupStandings = groupRows.map((g: Group) => {
-        const groupMembers = (members ?? []).filter((m) => m.group_id === g.id);
-        const memberIds = groupMembers.map((m) => m.player_id);
-        const gPlayers = allPlayers.filter((p: Player) => memberIds.includes(p.id));
-        const gMatches = (matches ?? []).filter((m: GroupMatch) => m.group_id === g.id);
-        const overrides: Record<string, number | null> = {};
-        for (const gm of groupMembers) overrides[gm.player_id] = gm.position_override;
-        const standings = computeGroupStandings(
-          gPlayers.map((p: Player) => ({ id: p.id, name: p.name })),
-          gMatches,
-          overrides
-        );
-        return standings.map((s) => ({ ...s, groupNumber: g.group_number }));
-      });
-
-      const overall = computeOverallStandings(perGroupStandings).map((s, i) => ({
-        ...s,
-        groupNumber: perGroupStandings.flat().find((ps) => ps.playerId === s.playerId)?.groupNumber ?? 0,
-        position: i + 1,
-      }));
-      setAllOverall(overall);
-      setLoading(false);
-    }
-    load();
+    loadData();
   }, [id]);
 
   useEffect(() => {
@@ -227,7 +235,15 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
                 return (
                   <tr key={s.playerId} className={`border-b last:border-0 ${isClassified ? "bg-brand-light" : ""}`}>
                     <td className="py-1.5 pr-1 text-muted-foreground font-mono font-semibold">{s.position}</td>
-                    <td className="py-1.5 font-medium max-w-[110px] truncate">{s.playerName}</td>
+                    <td
+                      onClick={() => isAdmin && setSelectedPlayer(players.find((p) => p.id === s.playerId) || null)}
+                      className={`py-1.5 font-medium max-w-[110px] truncate ${
+                        isAdmin ? "cursor-pointer hover:underline text-brand hover:text-brand-hover" : ""
+                      }`}
+                      title={isAdmin ? "Editar jogador" : undefined}
+                    >
+                      {s.playerName}
+                    </td>
                     <td className="py-1.5 px-1 text-center text-muted-foreground">{s.groupNumber}</td>
                     <td className="py-1.5 px-1 text-center">{s.wins}</td>
                     <td className="py-1.5 px-1 text-center text-green-700">{s.gamesFor}</td>
@@ -340,6 +356,13 @@ export default function ClassificacaoPage({ params }: { params: Promise<{ id: st
       >
         {generating ? "Gerando…" : "Confirmar e Gerar Chaveamento →"}
       </Button>
+
+      <EditPlayerDialog
+        player={selectedPlayer}
+        isOpen={selectedPlayer !== null}
+        onClose={() => setSelectedPlayer(null)}
+        onSaved={loadData}
+      />
     </div>
   );
 }

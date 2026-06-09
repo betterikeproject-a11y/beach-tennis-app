@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { TournamentPlayersList } from "@/components/TournamentPlayersList";
 import type { Tournament, TournamentStatus, Player } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
@@ -63,19 +64,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
         </Link>
       )}
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Jogadores ({players?.length ?? 0})</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {(players ?? []).map((p) => (
-              <span key={p.id} className="rounded-full border px-3 py-1 text-sm bg-white flex items-center gap-1">
-                {p.is_cabeca_de_chave && <span className="text-yellow-500 text-xs">★</span>}
-                {p.name}
-              </span>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <TournamentPlayersList players={players ?? []} isAdmin={isAdmin} />
 
       {isAdmin && tournament.status === "grupos" && (
         <div className="flex gap-2">
