@@ -3,9 +3,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TournamentPlayersList } from "@/components/TournamentPlayersList";
+import { TournamentStepper } from "@/components/TournamentStepper";
 import type { Tournament, TournamentStatus, Player } from "@/lib/types/database";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +44,8 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="space-y-6">
+      <TournamentStepper tournamentId={id} currentStatus={tournament.status} />
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{tournament.name}</h1>

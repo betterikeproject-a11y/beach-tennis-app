@@ -1,10 +1,13 @@
 ---
 type: project
 created: 2026-05-25
-updated: 2026-07-12
+updated: 2026-09-17
 ---
 
 # Project Conventions
+
+## Plan Creation & Location
+- All execution/task plans MUST be created in the `/docs` folder with the prefix `PLAN-` (format: `docs/PLAN-{task-slug}.md`).
 
 ## Git Workflow
 - Always create a new dedicated branch for major code changes.

@@ -3,6 +3,8 @@ export type PointsConfig = {
   pts_por_vitoria_grupo: number;
   pts_quartas: number;
   pts_semis: number;
+  pts_quarto: number;
+  pts_terceiro: number;
   pts_vice: number;
   pts_campeao: number;
 };
@@ -12,11 +14,13 @@ export const DEFAULT_POINTS_CONFIG: PointsConfig = {
   pts_por_vitoria_grupo: 20,
   pts_quartas: 60,
   pts_semis: 80,
+  pts_quarto: 80,
+  pts_terceiro: 95,
   pts_vice: 110,
   pts_campeao: 140,
 };
 
-export type KnockoutResult = "none" | "quartas" | "semis" | "vice" | "campeao";
+export type KnockoutResult = "none" | "quartas" | "semis" | "quarto" | "terceiro" | "vice" | "campeao";
 
 export type TournamentPlayerResult = {
   playerId: string;
@@ -45,6 +49,8 @@ export function computePlayerPoints(
     none: 0,
     quartas: config.pts_quartas,
     semis: config.pts_semis,
+    quarto: config.pts_quarto ?? config.pts_semis,
+    terceiro: config.pts_terceiro ?? (config.pts_semis + 15),
     vice: config.pts_vice,
     campeao: config.pts_campeao,
   }[result.knockoutResult];

@@ -60,6 +60,18 @@ describe("computePlayerPoints", () => {
     const row = computePlayerPoints(make({ victoriesInGroup: 3, knockoutResult: "semis" }), DEFAULT_POINTS_CONFIG);
     expect(row.total_pts).toBe(30 + 3 * 20 + 80); // 170
   });
+
+  it("terceiro gets pts_terceiro (95)", () => {
+    const row = computePlayerPoints(make({ knockoutResult: "terceiro" }), DEFAULT_POINTS_CONFIG);
+    expect(row.pts_eliminatorias).toBe(95);
+    expect(row.total_pts).toBe(DEFAULT_POINTS_CONFIG.pts_participacao + 95);
+  });
+
+  it("quarto gets pts_quarto (80)", () => {
+    const row = computePlayerPoints(make({ knockoutResult: "quarto" }), DEFAULT_POINTS_CONFIG);
+    expect(row.pts_eliminatorias).toBe(80);
+    expect(row.total_pts).toBe(DEFAULT_POINTS_CONFIG.pts_participacao + 80);
+  });
 });
 
 describe("detectNameSimilarities", () => {

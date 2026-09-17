@@ -18,6 +18,8 @@ const LABELS: Record<keyof Config, string> = {
   pts_por_vitoria_grupo: "Por vitória na fase de grupos",
   pts_quartas: "Eliminado nas quartas",
   pts_semis: "Eliminado nas semis",
+  pts_quarto: "4º Lugar",
+  pts_terceiro: "3º Lugar",
   pts_vice: "Vice-campeão",
   pts_campeao: "Campeão",
 };
@@ -34,6 +36,8 @@ function ConfiguracoesContent() {
     pts_por_vitoria_grupo: 20,
     pts_quartas: 60,
     pts_semis: 80,
+    pts_quarto: 80,
+    pts_terceiro: 95,
     pts_vice: 110,
     pts_campeao: 140,
   });
@@ -61,25 +65,32 @@ function ConfiguracoesContent() {
   // Load config for selected ranking
   useEffect(() => {
     if (!selectedRankingId) return;
-    setLoading(true);
+    let cancelled = false;
     supabase
       .from("league_ranking_points_config")
       .select("*")
       .eq("ranking_id", selectedRankingId)
       .single()
       .then(({ data }) => {
-        if (data) {
-          setConfig({
-            pts_participacao: data.pts_participacao,
-            pts_por_vitoria_grupo: data.pts_por_vitoria_grupo,
-            pts_quartas: data.pts_quartas,
-            pts_semis: data.pts_semis,
-            pts_vice: data.pts_vice,
-            pts_campeao: data.pts_campeao,
-          });
+        if (!cancelled) {
+          if (data) {
+            setConfig({
+              pts_participacao: data.pts_participacao,
+              pts_por_vitoria_grupo: data.pts_por_vitoria_grupo,
+              pts_quartas: data.pts_quartas,
+              pts_semis: data.pts_semis,
+              pts_quarto: data.pts_quarto ?? 80,
+              pts_terceiro: data.pts_terceiro ?? 95,
+              pts_vice: data.pts_vice,
+              pts_campeao: data.pts_campeao,
+            });
+          }
+          setLoading(false);
         }
-        setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedRankingId]);
 
   async function save() {

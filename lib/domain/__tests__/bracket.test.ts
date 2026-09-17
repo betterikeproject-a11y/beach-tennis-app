@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateBracket, suggestStartingPhase } from "../bracket";
+import { generateBracket, suggestStartingPhase, resolveKnockoutPodium } from "../bracket";
 import type { PairRef } from "../bracket";
 
 function makePairs(n: number): PairRef[] {
@@ -75,4 +75,35 @@ describe("suggestStartingPhase", () => {
   it("4 pairs → semis", () => expect(suggestStartingPhase(4)).toBe("semis"));
   it("6 pairs → quartas", () => expect(suggestStartingPhase(6)).toBe("quartas"));
   it("8 pairs → quartas", () => expect(suggestStartingPhase(8)).toBe("quartas"));
+});
+
+describe("resolveKnockoutPodium", () => {
+  it("resolves champion, vice, 3rd and 4th when 3rd place match was played", () => {
+    const matches = [
+      { phase: "semis" as const, pair_a_id: "p1", pair_b_id: "p4", winner_pair_id: "p1" },
+      { phase: "semis" as const, pair_a_id: "p2", pair_b_id: "p3", winner_pair_id: "p2" },
+      { phase: "final" as const, pair_a_id: "p1", pair_b_id: "p2", winner_pair_id: "p1" },
+      { phase: "terceiro" as const, pair_a_id: "p4", pair_b_id: "p3", winner_pair_id: "p3" },
+    ];
+    const podium = resolveKnockoutPodium(matches);
+    expect(podium.champPairId).toBe("p1");
+    expect(podium.vicePairId).toBe("p2");
+    expect(podium.terceiroPairId).toBe("p3");
+    expect(podium.quartoPairId).toBe("p4");
+  });
+
+  it("handles unplayed 3rd place match gracefully", () => {
+    const matches = [
+      { phase: "semis" as const, pair_a_id: "p1", pair_b_id: "p4", winner_pair_id: "p1" },
+      { phase: "semis" as const, pair_a_id: "p2", pair_b_id: "p3", winner_pair_id: "p2" },
+      { phase: "final" as const, pair_a_id: "p1", pair_b_id: "p2", winner_pair_id: "p1" },
+      { phase: "terceiro" as const, pair_a_id: "p4", pair_b_id: "p3", winner_pair_id: null },
+    ];
+    const podium = resolveKnockoutPodium(matches);
+    expect(podium.champPairId).toBe("p1");
+    expect(podium.vicePairId).toBe("p2");
+    expect(podium.terceiroPairId).toBeNull();
+    expect(podium.semiLoserPairIds).toContain("p4");
+    expect(podium.semiLoserPairIds).toContain("p3");
+  });
 });

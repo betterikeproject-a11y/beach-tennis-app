@@ -30,18 +30,19 @@ export function HomePageClient({ initialRankings, isAdmin }: HomePageClientProps
 
   // Load selected ranking from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem("selected_ranking_id");
-    if (saved && rankings.some((r) => r.id === saved)) {
-      setActiveRankingId(saved);
-    } else if (rankings.length > 0) {
-      // Default to "Masculino B/C", "Geral" or first ranking
-      const defaultRanking = rankings.find((r) => {
-        const name = r.name.toLowerCase();
-        return name === "masculino b/c" || name === "geral";
-      });
-      setActiveRankingId(defaultRanking ? defaultRanking.id : rankings[0].id);
-    }
-    setLoading(false);
+    queueMicrotask(() => {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("selected_ranking_id") : null;
+      if (saved && rankings.some((r) => r.id === saved)) {
+        setActiveRankingId(saved);
+      } else if (rankings.length > 0) {
+        const defaultRanking = rankings.find((r) => {
+          const name = r.name.toLowerCase();
+          return name === "masculino b/c" || name === "geral";
+        });
+        setActiveRankingId(defaultRanking ? defaultRanking.id : rankings[0].id);
+      }
+      setLoading(false);
+    });
   }, [rankings]);
 
   function handleRankingChange(id: string) {

@@ -31,10 +31,10 @@ This skill provides a framework for breaking down work into clear, actionable ta
 - Critical path highlighted
 - **Phase X: Verification is always LAST**
 
-### 4. Dynamic Naming in Project Root
-- Plan files are saved as `{task-slug}.md` in the PROJECT ROOT
-- Name derived from task (e.g., "add auth" → `auth-feature.md`)
-- **NEVER** inside `.agents/`, `docs/`, or temp folders
+### 4. Mandatory Location and Naming in `/docs`
+- Plan files MUST be saved in `/docs` as `docs/PLAN-{task-slug}.md`
+- Name derived from task with mandatory `PLAN-` prefix (e.g., "add auth" → `docs/PLAN-auth-feature.md`)
+- **NEVER** outside `/docs` and **NEVER** without the `PLAN-` prefix
 
 ## Planning Principles (NOT Templates!)
 

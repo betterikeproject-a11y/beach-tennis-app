@@ -29,14 +29,13 @@ export function LeagueRanking({ rankingId }: { rankingId: string }) {
   const [selectedPlayer, setSelectedPlayer] = useState<LeagueRankingRow | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setRows([]);
-    setPodiums([]);
-    setPointsHistory([]);
-    setTournamentsMap(new Map());
-    setError(null);
-
     async function load() {
+      setLoading(true);
+      setRows([]);
+      setPodiums([]);
+      setPointsHistory([]);
+      setTournamentsMap(new Map());
+      setError(null);
       const [{ data: rankingData, error: rankingErr }, { data: finishedTournaments }] = await Promise.all([
         supabase.from("league_ranking").select("*").eq("ranking_id", rankingId).order("total_pts", { ascending: false }),
         supabase.from("tournaments").select("id, name, date").eq("status", "finalizado").eq("ranking_id", rankingId).order("date", { ascending: false }),

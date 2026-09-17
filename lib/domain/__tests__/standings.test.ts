@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeGroupStandings, computeOverallStandings } from "../standings";
+import { computeGroupStandings, computeOverallStandings, computeOverallStandingsWithOverrides } from "../standings";
 import type { MatchRecord, PlayerRef } from "../standings";
 
 const players: PlayerRef[] = [
@@ -93,4 +93,16 @@ describe("computeOverallStandings", () => {
     expect(overall[0].position).toBe(1);
     expect(overall[7].position).toBe(8);
   });
+
+  it("respects position overrides in computeOverallStandingsWithOverrides", () => {
+    const g1 = computeGroupStandings(
+      [{ id: "a", name: "Ana" }, { id: "b", name: "Bruno" }],
+      []
+    );
+    // Ana is 1st alphabetically default. Override Bruno to 1st position.
+    const overall = computeOverallStandingsWithOverrides([g1], { b: 1, a: 2 });
+    expect(overall[0].playerId).toBe("b");
+    expect(overall[1].playerId).toBe("a");
+  });
 });
+

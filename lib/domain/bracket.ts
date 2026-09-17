@@ -149,3 +149,53 @@ export function suggestStartingPhase(
   if (pairCount <= 8) return "quartas";
   return null;
 }
+
+export type MatchPodiumInput = {
+  phase: KnockoutPhase;
+  pair_a_id: string | null;
+  pair_b_id: string | null;
+  winner_pair_id: string | null;
+};
+
+export type KnockoutPodium = {
+  champPairId: string | null;
+  vicePairId: string | null;
+  terceiroPairId: string | null;
+  quartoPairId: string | null;
+  semiLoserPairIds: string[];
+  quartasLoserPairIds: string[];
+};
+
+export function resolveKnockoutPodium(matches: MatchPodiumInput[]): KnockoutPodium {
+  const finalMatch = matches.find((m) => m.phase === "final");
+  const terceiroMatch = matches.find((m) => m.phase === "terceiro");
+
+  const champPairId = finalMatch?.winner_pair_id ?? null;
+  const vicePairId = finalMatch
+    ? (champPairId === finalMatch.pair_a_id ? finalMatch.pair_b_id : finalMatch.pair_a_id)
+    : null;
+
+  const terceiroPairId = terceiroMatch?.winner_pair_id ?? null;
+  const quartoPairId = terceiroMatch && terceiroPairId
+    ? (terceiroPairId === terceiroMatch.pair_a_id ? terceiroMatch.pair_b_id : terceiroMatch.pair_a_id)
+    : null;
+
+  const semiLosers = matches
+    .filter((m) => m.phase === "semis" && m.winner_pair_id)
+    .map((m) => (m.winner_pair_id === m.pair_a_id ? m.pair_b_id : m.pair_a_id))
+    .filter((id): id is string => id !== null);
+
+  const quartasLosers = matches
+    .filter((m) => m.phase === "quartas" && m.winner_pair_id)
+    .map((m) => (m.winner_pair_id === m.pair_a_id ? m.pair_b_id : m.pair_a_id))
+    .filter((id): id is string => id !== null);
+
+  return {
+    champPairId,
+    vicePairId,
+    terceiroPairId,
+    quartoPairId,
+    semiLoserPairIds: semiLosers,
+    quartasLoserPairIds: quartasLosers,
+  };
+}

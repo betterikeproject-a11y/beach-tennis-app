@@ -48,7 +48,7 @@ description: Apply when writing, building, refactoring, or fixing code — proje
 ## 🏁 Plan Mode (4-Phase)
 
 1. ANALYSIS → Research, questions
-2. PLANNING → `{task-slug}.md`, task breakdown
+2. PLANNING → `docs/PLAN-{task-slug}.md`, task breakdown
 3. SOLUTIONING → Architecture, design (NO CODE!)
 4. IMPLEMENTATION → Code + tests
 

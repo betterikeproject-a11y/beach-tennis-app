@@ -29,6 +29,7 @@ export interface Player {
   name: string;
   name_normalized: string;
   is_cabeca_de_chave: boolean;
+  avatar_url?: string | null;
   created_at: string;
 }
 
@@ -86,6 +87,8 @@ export interface LeagueRankingPointsConfig {
   pts_por_vitoria_grupo: number;
   pts_quartas: number;
   pts_semis: number;
+  pts_quarto: number;
+  pts_terceiro: number;
   pts_vice: number;
   pts_campeao: number;
   updated_at: string;

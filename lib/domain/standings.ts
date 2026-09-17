@@ -99,6 +99,25 @@ export function computeOverallStandings(
   return all.map((s, i) => ({ ...s, position: i + 1 }));
 }
 
+/**
+ * Computes overall standings with optional position overrides for overall ranking tied resolution.
+ */
+export function computeOverallStandingsWithOverrides(
+  perGroupStandings: PlayerStanding[][],
+  overrides: Record<string, number | null> = {}
+): PlayerStanding[] {
+  const all = perGroupStandings.flat().map((s) => ({ ...s }));
+  all.sort((a, b) => {
+    const oA = overrides[a.playerId] ?? null;
+    const oB = overrides[b.playerId] ?? null;
+    if (oA !== null && oB !== null) return oA - oB;
+    if (oA !== null) return -1;
+    if (oB !== null) return 1;
+    return compareStandings(a, b);
+  });
+  return all.map((s, i) => ({ ...s, position: i + 1 }));
+}
+
 function compareStandings(a: PlayerStanding, b: PlayerStanding): number {
   if (b.points !== a.points) return b.points - a.points;
   if (b.saldo !== a.saldo) return b.saldo - a.saldo;
@@ -106,3 +125,4 @@ function compareStandings(a: PlayerStanding, b: PlayerStanding): number {
   if (b.gamesFor !== a.gamesFor) return b.gamesFor - a.gamesFor;
   return a.playerName.localeCompare(b.playerName, "pt-BR", { sensitivity: "base" });
 }
+

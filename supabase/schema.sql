@@ -62,6 +62,7 @@ CREATE TABLE players (
   name                TEXT NOT NULL,             -- display name (as entered)
   name_normalized     TEXT NOT NULL,             -- lowercase + trimmed, used for league ranking matching
   is_cabeca_de_chave  BOOLEAN NOT NULL DEFAULT false,
+  avatar_url          TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -192,6 +193,8 @@ CREATE TABLE league_ranking_points_config (
   pts_por_vitoria_grupo INTEGER NOT NULL DEFAULT 20,
   pts_quartas           INTEGER NOT NULL DEFAULT 60,
   pts_semis             INTEGER NOT NULL DEFAULT 80,
+  pts_quarto            INTEGER NOT NULL DEFAULT 80,
+  pts_terceiro          INTEGER NOT NULL DEFAULT 95,
   pts_vice              INTEGER NOT NULL DEFAULT 110,
   pts_campeao           INTEGER NOT NULL DEFAULT 140,
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -211,6 +214,8 @@ BEGIN
     pts_por_vitoria_grupo,
     pts_quartas,
     pts_semis,
+    pts_quarto,
+    pts_terceiro,
     pts_vice,
     pts_campeao
   ) VALUES (
@@ -219,6 +224,8 @@ BEGIN
     20,
     60,
     80,
+    80,
+    95,
     110,
     140
   );

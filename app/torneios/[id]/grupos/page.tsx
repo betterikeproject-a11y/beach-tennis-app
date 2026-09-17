@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { computeGroupStandings } from "@/lib/domain/standings";
 import { isValidScore } from "@/lib/domain/matches";
-import { ScoreInput } from "@/components/ScoreInput";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
 import { EditPlayerDialog } from "@/components/EditPlayerDialog";
+import { TournamentStepper } from "@/components/TournamentStepper";
+import { FloatingActionBar } from "@/components/FloatingActionBar";
 import type { Group, GroupMatch, GroupMember, Player } from "@/lib/types/database";
 import type { PlayerStanding } from "@/lib/domain/standings";
 
@@ -60,7 +60,7 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
     }
   };
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const [{ data: groupRows }, { data: members }, { data: allMatches }, { data: allPlayers }] = await Promise.all([
       supabase.from("groups").select("*").eq("tournament_id", id).order("group_number"),
       supabase.from("group_members").select("*"),
@@ -89,9 +89,10 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
 
     setGroups(built);
     setLoading(false);
-  }
+  }, [id]);
 
-  useEffect(() => { loadData(); }, [id]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
     const channel = supabase
@@ -99,7 +100,7 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "group_matches" }, () => { loadData(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [id]);
+  }, [id, loadData]);
 
   const saveScore = useCallback(async (matchId: string, scoreA: number | null, scoreB: number | null) => {
     const bothSet = scoreA !== null && scoreB !== null;
@@ -192,7 +193,9 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16">
+      <TournamentStepper tournamentId={id} currentStatus="grupos" />
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Fase de Grupos</h1>
         {savedIndicator && <span className="text-xs text-green-600 animate-pulse">✓ salvo</span>}
@@ -216,12 +219,12 @@ export default function GruposPage({ params }: { params: Promise<{ id: string }>
       </div>
 
       {isAdmin && allDone && (
-        <Button
-          className="w-full bg-green-600 hover:bg-green-700 text-white h-12 text-base"
-          onClick={advanceToKnockout}
-        >
-          Avançar para Eliminatórias →
-        </Button>
+        <FloatingActionBar
+          title="Todos os jogos de grupo concluídos!"
+          description="Avançar para a classificação geral e montagem das duplas eliminatórias"
+          actionLabel="Avançar para Classificação"
+          onAction={advanceToKnockout}
+        />
       )}
 
       <EditPlayerDialog

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { computeGroupStandings, computeOverallStandings } from "@/lib/domain/standings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +61,7 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
   const [allOverall, setAllOverall] = useState<(PlayerStanding & { groupNumber: number, position: number })[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const [
       { data: t },
       { data: groupRows },
@@ -98,10 +98,9 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
     });
     setGroups(built);
 
-    const allGroupStandings = built.map(gd => gd.standings.map(s => ({ ...s, groupNumber: gd.group.group_number })));
-    const overall = computeOverallStandings(allGroupStandings).map((s, i) => ({
+    const overall = computeOverallStandings(built.map((g) => g.standings)).map((s, i) => ({
       ...s,
-      groupNumber: allGroupStandings.flat().find(gs => gs.playerId === s.playerId)?.groupNumber ?? 0,
+      groupNumber: built.find((g) => g.players.some((p) => p.id === s.playerId))?.group.group_number ?? 0,
       position: i + 1,
     }));
     setAllOverall(overall);
@@ -115,9 +114,10 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
     }
 
     setLoading(false);
-  }
+  }, [id]);
 
-  useEffect(() => { loadData(); }, [id]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
     const ch = supabase
@@ -126,7 +126,7 @@ export default function VisualizacaoPage({ params }: { params: Promise<{ id: str
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "knockout_matches" }, loadData)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [id]);
+  }, [id, loadData]);
 
   if (loading) {
     return (

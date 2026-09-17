@@ -4,18 +4,20 @@ import { use, useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { isValidScore } from "@/lib/domain/matches";
-import { getAdvancementRule } from "@/lib/domain/bracket";
-import { computePlayerPoints, DEFAULT_POINTS_CONFIG, normalizeName } from "@/lib/domain/ranking";
+import { getAdvancementRule, resolveKnockoutPodium } from "@/lib/domain/bracket";
+import { computePlayerPoints, DEFAULT_POINTS_CONFIG } from "@/lib/domain/ranking";
 import { computeGroupStandings, computeOverallStandings } from "@/lib/domain/standings";
-import { ScoreInput } from "@/components/ScoreInput";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TournamentStepper } from "@/components/TournamentStepper";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Trophy, Award } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/AuthProvider";
 import { EditPlayerDialog } from "@/components/EditPlayerDialog";
 import type { KnockoutMatch, KnockoutPair, Player, Group, GroupMatch } from "@/lib/types/database";
 import type { KnockoutPhase } from "@/lib/domain/bracket";
+import type { KnockoutResult } from "@/lib/domain/ranking";
 
 const PHASE_LABEL: Record<KnockoutPhase, string> = {
   quartas: "Quartas de Final",
@@ -37,7 +39,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const { isAdmin } = useAuth();
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const [{ data: m }, { data: p }, { data: pl }] = await Promise.all([
       supabase.from("knockout_matches").select("*").eq("tournament_id", id).order("bracket_position"),
       supabase.from("knockout_pairs").select("*").eq("tournament_id", id).order("seed"),
@@ -47,9 +49,10 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
     setPairs(p ?? []);
     setPlayers(pl ?? []);
     setLoading(false);
-  }
+  }, [id]);
 
-  useEffect(() => { loadData(); }, [id]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
     const ch = supabase
@@ -57,16 +60,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "knockout_matches" }, loadData)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [id]);
-
-  function pairName(pairId: string | null): string {
-    if (!pairId) return "A definir";
-    const pair = pairs.find((p) => p.id === pairId);
-    if (!pair) return "A definir";
-    const p1 = players.find((p) => p.id === pair.player1_id)?.name ?? "?";
-    const p2 = players.find((p) => p.id === pair.player2_id)?.name ?? "?";
-    return `${p1} / ${p2}`;
-  }
+  }, [id, loadData]);
 
   function renderPair(pairId: string | null) {
     if (!pairId) return <span className="text-muted-foreground">A definir</span>;
@@ -135,7 +129,7 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
 
     toast.success("Placar salvo");
     loadData();
-  }, [matches, pairs, id]);
+  }, [matches, pairs, loadData]);
 
   function handleScoreChange(match: KnockoutMatch, a: number | null, b: number | null) {
     const timerId = String(match.id);
@@ -144,6 +138,33 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
     }
     setMatches((prev) => prev.map((m) => m.id === match.id ? { ...m, score_a: a, score_b: b } : m));
     debounceTimers.current[timerId] = setTimeout(() => saveScore(match, a, b), 500);
+  }
+
+  async function handleFallbackTerceiro(match: KnockoutMatch) {
+    if (!match.pair_a_id || !match.pair_b_id) return;
+    const pairA = pairs.find((p) => p.id === match.pair_a_id);
+    const pairB = pairs.find((p) => p.id === match.pair_b_id);
+    if (!pairA || !pairB) return;
+
+    // By seed: lower seed number = better original standing
+    const winnerId = pairA.seed <= pairB.seed ? pairA.id : pairB.id;
+
+    const { error } = await supabase
+      .from("knockout_matches")
+      .update({
+        score_a: winnerId === pairA.id ? 6 : 0,
+        score_b: winnerId === pairB.id ? 6 : 0,
+        winner_pair_id: winnerId,
+      })
+      .eq("id", match.id);
+
+    if (error) {
+      toast.error("Erro ao registrar critério técnico");
+      return;
+    }
+
+    toast.success("3º e 4º lugares definidos por critério técnico!");
+    loadData();
   }
 
   const finalMatch = matches.find((m) => m.phase === "final");
@@ -190,27 +211,26 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
       });
       const overallStandings = computeOverallStandings(perGroupStandings);
 
-      // Determine knockout result per pair
-      const champPairId = finalMatch?.winner_pair_id;
-      const vicePairId = finalMatch ? (champPairId === finalMatch.pair_a_id ? finalMatch.pair_b_id : finalMatch.pair_a_id) : null;
-      const semiLosers = matches.filter((m) => m.phase === "semis" && m.winner_pair_id).map((m) => m.winner_pair_id === m.pair_a_id ? m.pair_b_id : m.pair_a_id);
-      const quartasLosers = matches.filter((m) => m.phase === "quartas" && m.winner_pair_id).map((m) => m.winner_pair_id === m.pair_a_id ? m.pair_b_id : m.pair_a_id);
+      // Determine knockout result per pair using resolveKnockoutPodium
+      const podium = resolveKnockoutPodium(matches);
 
       function pairIdForPlayer(playerId: string): string | null {
         return pairs.find((p) => p.player1_id === playerId || p.player2_id === playerId)?.id ?? null;
       }
 
-      function knockoutResultForPlayer(playerId: string) {
+      function knockoutResultForPlayer(playerId: string): KnockoutResult {
         const pairId = pairIdForPlayer(playerId);
-        if (!pairId) return "none" as const;
-        if (pairId === champPairId) return "campeao" as const;
-        if (pairId === vicePairId) return "vice" as const;
-        if (semiLosers.includes(pairId)) return "semis" as const;
-        if (quartasLosers.includes(pairId)) return "quartas" as const;
+        if (!pairId) return "none";
+        if (pairId === podium.champPairId) return "campeao";
+        if (pairId === podium.vicePairId) return "vice";
+        if (podium.terceiroPairId && pairId === podium.terceiroPairId) return "terceiro";
+        if (podium.quartoPairId && pairId === podium.quartoPairId) return "quarto";
+        if (podium.semiLoserPairIds.includes(pairId)) return "semis";
+        if (podium.quartasLoserPairIds.includes(pairId)) return "quartas";
         // Reached knockout but didn't reach quartas final (bye situations)
         const reachedKnockout = pairs.some((p) => p.id === pairId);
-        if (reachedKnockout) return "quartas" as const;
-        return "none" as const;
+        if (reachedKnockout) return "quartas";
+        return "none";
       }
 
       // Compute points per player
@@ -251,7 +271,9 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16">
+      <TournamentStepper tournamentId={id} currentStatus="eliminatorias" />
+
       <h1 className="text-2xl font-bold">Eliminatórias</h1>
 
       {presentPhases.map((phase) => (
@@ -319,6 +341,19 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
                     </div>
+
+                    {m.phase === "terceiro" && m.pair_a_id && m.pair_b_id && !m.winner_pair_id && isAdmin && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleFallbackTerceiro(m)}
+                        className="mt-1 w-full text-xs text-brand hover:text-brand-hover hover:bg-brand-light border-brand/40 cursor-pointer h-9"
+                      >
+                        <Award className="w-3.5 h-3.5 mr-1" />
+                        Definir 3º/4º por Critério Técnico (sem jogo)
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -328,19 +363,55 @@ export default function EliminatoriasPage({ params }: { params: Promise<{ id: st
       ))}
 
       {tournamentComplete && (
-        <div className="rounded-lg bg-brand-light border border-brand/30 p-4 text-center space-y-3">
-          <p className="text-3xl">🏆</p>
-          <div className="space-y-1">
-            <p className="font-bold text-lg text-brand">Campeão: {renderPair(finalMatch?.winner_pair_id ?? null)}</p>
-            <p className="text-sm font-medium text-muted-foreground">Vice: {renderPair(finalMatch ? (finalMatch.winner_pair_id === finalMatch.pair_a_id ? finalMatch.pair_b_id : finalMatch.pair_a_id) : null)}</p>
+        <div className="rounded-xl bg-brand-light/70 border border-brand/30 p-6 text-center space-y-4 shadow-sm">
+          <Trophy className="w-10 h-10 text-brand mx-auto animate-bounce" />
+          <div className="space-y-3">
+            <div>
+              <span className="text-xs uppercase font-bold text-brand tracking-wider">Campeão</span>
+              <p className="font-extrabold text-xl text-foreground mt-0.5">
+                {renderPair(finalMatch?.winner_pair_id ?? null)}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-3 border-t border-brand/20 text-xs">
+              <div className="p-2.5 rounded-lg bg-white/70 border border-border/60">
+                <span className="text-muted-foreground font-medium block">Vice-Campeão</span>
+                <span className="font-bold text-foreground block mt-0.5">
+                  {renderPair(
+                    finalMatch
+                      ? finalMatch.winner_pair_id === finalMatch.pair_a_id
+                        ? finalMatch.pair_b_id
+                        : finalMatch.pair_a_id
+                      : null
+                  )}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-white/70 border border-border/60">
+                <span className="text-muted-foreground font-medium block">3º Lugar</span>
+                <span className="font-bold text-foreground block mt-0.5">
+                  {renderPair(matches.find((m) => m.phase === "terceiro")?.winner_pair_id ?? null)}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-white/70 border border-border/60">
+                <span className="text-muted-foreground font-medium block">4º Lugar</span>
+                <span className="font-bold text-foreground block mt-0.5">
+                  {(() => {
+                    const tm = matches.find((m) => m.phase === "terceiro");
+                    if (!tm || !tm.winner_pair_id) return "–";
+                    return renderPair(
+                      tm.winner_pair_id === tm.pair_a_id ? tm.pair_b_id : tm.pair_a_id
+                    );
+                  })()}
+                </span>
+              </div>
+            </div>
           </div>
           {isAdmin && (
             <Button
-              className="w-full bg-brand hover:bg-brand-hover text-white h-12 text-base"
+              className="w-full bg-brand hover:bg-brand-hover text-white h-12 text-base font-semibold shadow-md active:scale-[0.99] cursor-pointer"
               onClick={finalizeTournament}
               disabled={finalizing}
             >
-              {finalizing ? "Finalizando…" : "Finalizar Torneio e Salvar Ranking"}
+              {finalizing ? "Finalizando…" : "Finalizar Torneio e Consolidar Pontuação"}
             </Button>
           )}
         </div>

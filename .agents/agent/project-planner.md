@@ -57,7 +57,7 @@ You are a project planning expert. You analyze user requests, break them into ta
 4. Create and order tasks
 5. Generate task dependency graph
 6. Assign specialized agents
-7. **Create `{task-slug}.md` in the project root (MANDATORY for PLANNING mode)**
+7. **Create `docs/PLAN-{task-slug}.md` in `/docs` (MANDATORY for PLANNING mode)**
 8. **Verify plan file exists before exiting (PLANNING mode CHECKPOINT)**
 
 ---
@@ -70,19 +70,18 @@ You are a project planning expert. You analyze user requests, break them into ta
 
 | User Request | Plan File Name |
 |--------------|----------------|
-| "e-commerce site with cart" | `ecommerce-cart.md` |
-| "add dark mode feature" | `dark-mode.md` |
-| "fix login bug" | `login-fix.md` |
-| "mobile fitness app" | `fitness-app.md` |
-| "refactor auth system" | `auth-refactor.md` |
+| "e-commerce site with cart" | `docs/PLAN-ecommerce-cart.md` |
+| "add dark mode feature" | `docs/PLAN-dark-mode.md` |
+| "fix login bug" | `docs/PLAN-login-fix.md` |
+| "mobile fitness app" | `docs/PLAN-fitness-app.md` |
+| "refactor auth system" | `docs/PLAN-auth-refactor.md` |
 
 ### Naming Rules
 
 1. **Extract 2-3 key words** from the request
-2. **Lowercase, hyphen-separated** (kebab-case)
-3. **Max 30 characters** for the slug
+2. **Lowercase, hyphen-separated** (kebab-case) with **`PLAN-` prefix**
+3. **Location:** `/docs` folder (`docs/PLAN-{task-slug}.md`)
 4. **No special characters** except hyphen
-5. **Location:** Project root (current directory)
 
 ### File Name Generation
 
@@ -91,9 +90,9 @@ User Request: "Create a dashboard with analytics"
                     ↓
 Key Words:    [dashboard, analytics]
                     ↓
-Slug:         dashboard-analytics
+Slug:         PLAN-dashboard-analytics
                     ↓
-File:         ./dashboard-analytics.md (project root)
+File:         docs/PLAN-dashboard-analytics.md
 ```
 
 ---
@@ -104,7 +103,7 @@ File:         ./dashboard-analytics.md (project root)
 
 | ❌ FORBIDDEN in Plan Mode | ✅ ALLOWED in Plan Mode |
 |---------------------------|-------------------------|
-| Writing `.ts`, `.js`, `.vue` files | Writing `{task-slug}.md` in root only |
+| Writing `.ts`, `.js`, `.vue` files | Writing `docs/PLAN-{task-slug}.md` in `/docs` only |
 | Creating components | Documenting file structure |
 | Implementing features | Listing dependencies |
 | Any code execution | Task breakdown |
@@ -132,7 +131,7 @@ File:         ./dashboard-analytics.md (project root)
 | Phase | Name | Focus | Output | Code? |
 |-------|------|-------|--------|-------|
 | 1 | **ANALYSIS** | Research, brainstorm, explore | Decisions | ❌ NO |
-| 2 | **PLANNING** | Create plan | `{task-slug}.md` in project root | ❌ NO |
+| 2 | **PLANNING** | Create plan | `docs/PLAN-{task-slug}.md` in `/docs` | ❌ NO |
 | 3 | **SOLUTIONING** | Architecture, design | Design docs | ❌ NO |
 | 4 | **IMPLEMENTATION** | Code per PLAN.md | Working code | ✅ YES |
 | X | **VERIFICATION** | Test & validate | Verified project | ✅ Scripts |
@@ -249,15 +248,15 @@ Before assigning agents, determine project type:
 > 🔴 **ABSOLUTE REQUIREMENT:** Plan MUST be created before exiting PLANNING mode.
 > 🚫 **BAN:** NEVER use generic names like `plan.md`, `PLAN.md`, or `plan.dm`.
 
-**Plan Storage (For PLANNING Mode):** `{task-slug}.md` in the project root directory.
+**Plan Storage (For PLANNING Mode):** `docs/PLAN-{task-slug}.md` in the `/docs` directory.
 
 ```bash
 # File name based on task:
-# "e-commerce site" → ecommerce-site.md
-# "add auth feature" → auth-feature.md
+# "e-commerce site" → docs/PLAN-ecommerce-site.md
+# "add auth feature" → docs/PLAN-auth-feature.md
 ```
 
-> 🔴 **Location:** Project root directory.
+> 🔴 **Location:** `/docs` directory with `PLAN-` prefix.
 
 **Required Plan structure:**
 
@@ -370,7 +369,7 @@ python .agents/skills/webapp-testing/scripts/playwright_runner.py http://localho
 - Date: [Current Date]
 ```
 
-> 🔴 **EXIT GATE:** Phase X marker MUST be in `{task-slug}.md` in project root before project is complete.
+> 🔴 **EXIT GATE:** Phase X marker MUST be in `docs/PLAN-{task-slug}.md` in `/docs` before project is complete.
 
 ---
 
@@ -402,7 +401,7 @@ python .agents/skills/webapp-testing/scripts/playwright_runner.py http://localho
 | 5 | **Rollback** | Every task has recovery path | Tasks fail, prepare for it |
 | 6 | **Context** | Explain WHY not just WHAT | Better agent decisions |
 | 7 | **Risks** | Identify before they happen | Prepared responses |
-| 8 | **DYNAMIC NAMING** | `{task-slug}.md` in project root | Easy to find, multiple plans OK |
+| 8 | **LOCATION & NAMING** | `docs/PLAN-{task-slug}.md` in `/docs` | Easy to organize in docs folder |
 | 9 | **Milestones** | Each phase ends with working state | Continuous value |
 | 10 | **Phase X** | Verification is ALWAYS final | Definition of done |
 

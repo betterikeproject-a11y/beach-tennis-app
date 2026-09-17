@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Upload, Loader2 } from "lucide-react";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import type { Player } from "@/lib/types/database";
 
 interface EditPlayerDialogProps {
@@ -25,15 +27,18 @@ interface EditPlayerDialogProps {
 }
 
 export function EditPlayerDialog({ player, isOpen, onClose, onSaved }: EditPlayerDialogProps) {
-  const [newName, setNewName] = useState("");
+  const [newName, setNewName] = useState(player?.name || "");
+  const [avatarUrl, setAvatarUrl] = useState(player?.avatar_url || "");
+  const [prevPlayerId, setPrevPlayerId] = useState<string | null>(player?.id || null);
   const [pastPlayers, setPastPlayers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  useEffect(() => {
-    if (player) {
-      setNewName(player.name);
-    }
-  }, [player]);
+  if (player && player.id !== prevPlayerId) {
+    setPrevPlayerId(player.id);
+    setNewName(player.name);
+    setAvatarUrl(player.avatar_url || "");
+  }
 
   useEffect(() => {
     if (isOpen && player) {
@@ -53,6 +58,77 @@ export function EditPlayerDialog({ player, isOpen, onClose, onSaved }: EditPlaye
         });
     }
   }, [isOpen, player]);
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingAvatar(true);
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        img.src = event.target?.result as string;
+      };
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 120;
+        canvas.height = 120;
+        const ctx = canvas.getContext("2d");
+
+        if (!ctx) {
+          toast.error("Não foi possível processar a imagem.");
+          setUploadingAvatar(false);
+          return;
+        }
+
+        const minDim = Math.min(img.width, img.height);
+        const sx = (img.width - minDim) / 2;
+        const sy = (img.height - minDim) / 2;
+
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 120, 120);
+
+        const dataUrl = canvas.toDataURL("image/webp", 0.8);
+
+        canvas.toBlob(
+          async (blob) => {
+            if (!blob) {
+              setAvatarUrl(dataUrl);
+              setUploadingAvatar(false);
+              toast.success("Foto comprimida (<15KB)!");
+              return;
+            }
+
+            const fileName = `${player?.id || Date.now()}-${Date.now()}.webp`;
+            const { data, error } = await supabase.storage
+              .from("player-avatars")
+              .upload(fileName, blob, { contentType: "image/webp", upsert: true });
+
+            if (!error && data) {
+              const { data: publicUrlData } = supabase.storage
+                .from("player-avatars")
+                .getPublicUrl(fileName);
+              setAvatarUrl(publicUrlData.publicUrl);
+            } else {
+              setAvatarUrl(dataUrl);
+            }
+            toast.success("Foto comprimida e otimizada (<15KB)!");
+            setUploadingAvatar(false);
+          },
+          "image/webp",
+          0.8
+        );
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Erro no processamento de avatar:", err);
+      toast.error("Erro ao carregar imagem.");
+      setUploadingAvatar(false);
+    }
+  }
 
   async function handleSave() {
     if (!player) return;
@@ -82,10 +158,14 @@ export function EditPlayerDialog({ player, isOpen, onClose, onSaved }: EditPlaye
         return;
       }
 
-      // 1. Update the name in players table
+      // 1. Update the name and avatar in players table
       const { error: updatePlayerError } = await supabase
         .from("players")
-        .update({ name: trimmed, name_normalized })
+        .update({
+          name: trimmed,
+          name_normalized,
+          avatar_url: avatarUrl.trim() || null,
+        })
         .eq("id", player.id);
 
       if (updatePlayerError) throw updatePlayerError;
@@ -127,21 +207,65 @@ export function EditPlayerDialog({ player, isOpen, onClose, onSaved }: EditPlaye
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Editar Nome do Jogador</DialogTitle>
+          <DialogTitle>Editar Atleta</DialogTitle>
           <DialogDescription>
-            Altere o nome do jogador sorteado. Seus pontos e jogos serão atribuídos ao novo nome.
+            Altere o nome e personalize a foto do atleta.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        {/* Live Preview of Avatar */}
+        <div className="flex flex-col items-center justify-center gap-2 p-3 bg-muted/40 rounded-lg border">
+          <PlayerAvatar
+            name={newName || player?.name || ""}
+            avatarUrl={avatarUrl.trim() || null}
+            size="lg"
+          />
+          <span className="text-xs text-muted-foreground font-medium">
+            Prévia visual do atleta
+          </span>
+        </div>
+
+        <div className="space-y-4 py-1">
           <div className="space-y-2">
-            <Label htmlFor="newName">Nome do Jogador</Label>
+            <Label htmlFor="newName">Nome do Atleta</Label>
             <Input
               id="newName"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="Digite o nome do jogador"
+              placeholder="Digite o nome do atleta"
               disabled={loading}
+              className="h-11"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Foto de Perfil (Avatar)</Label>
+            <div className="flex gap-2 items-center">
+              <label className="flex-1 cursor-pointer">
+                <div className="h-11 px-3 border border-input rounded-md flex items-center justify-center gap-2 text-xs font-semibold bg-background hover:bg-muted/60 transition-colors">
+                  {uploadingAvatar ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-brand" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-brand" />
+                  )}
+                  <span>{uploadingAvatar ? "Comprimindo..." : "Enviar Foto do Dispositivo"}</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  disabled={loading || uploadingAvatar}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            <Input
+              id="avatarUrl"
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="ou cole uma URL de foto (https://...)"
+              disabled={loading || uploadingAvatar}
+              className="h-11 text-xs"
             />
           </div>
 
@@ -150,7 +274,7 @@ export function EditPlayerDialog({ player, isOpen, onClose, onSaved }: EditPlaye
               <Label htmlFor="pastPlayerSelect">Selecionar de Torneios Anteriores</Label>
               <select
                 id="pastPlayerSelect"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                className="w-full h-11 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 onChange={(e) => {
                   if (e.target.value) {
                     setNewName(e.target.value);
@@ -174,7 +298,7 @@ export function EditPlayerDialog({ player, isOpen, onClose, onSaved }: EditPlaye
           <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={handleSave} disabled={loading}>
+          <Button onClick={handleSave} disabled={loading || uploadingAvatar}>
             {loading ? "Salvando..." : "Salvar"}
           </Button>
         </DialogFooter>
@@ -182,3 +306,4 @@ export function EditPlayerDialog({ player, isOpen, onClose, onSaved }: EditPlaye
     </Dialog>
   );
 }
+
