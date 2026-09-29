@@ -29,6 +29,12 @@ export function LeagueRanking({ rankingId }: { rankingId: string }) {
   const [selectedPlayer, setSelectedPlayer] = useState<LeagueRankingRow | null>(null);
 
   useEffect(() => {
+    if (!rankingId) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     async function load() {
       setLoading(true);
       setRows([]);
@@ -36,64 +42,70 @@ export function LeagueRanking({ rankingId }: { rankingId: string }) {
       setPointsHistory([]);
       setTournamentsMap(new Map());
       setError(null);
-      const [{ data: rankingData, error: rankingErr }, { data: finishedTournaments }] = await Promise.all([
-        supabase.from("league_ranking").select("*").eq("ranking_id", rankingId).order("total_pts", { ascending: false }),
-        supabase.from("tournaments").select("id, name, date").eq("status", "finalizado").eq("ranking_id", rankingId).order("date", { ascending: false }),
-      ]);
+      try {
+        const [{ data: rankingData, error: rankingErr }, { data: finishedTournaments }] = await Promise.all([
+          supabase.from("league_ranking").select("*").eq("ranking_id", rankingId).order("total_pts", { ascending: false }),
+          supabase.from("tournaments").select("id, name, date").eq("status", "finalizado").eq("ranking_id", rankingId).order("date", { ascending: false }),
+        ]);
 
-      if (rankingErr) { setError(rankingErr.message); setLoading(false); return; }
-      setRows(rankingData ?? []);
+        if (rankingErr) throw rankingErr;
+        setRows(rankingData ?? []);
 
-      const tournaments = finishedTournaments ?? [];
-      if (tournaments.length === 0) { setLoading(false); return; }
+        const tournaments = finishedTournaments ?? [];
+        if (tournaments.length === 0) return;
 
-      const tMap = new Map();
-      for (const t of tournaments) tMap.set(t.id, { name: t.name, date: t.date });
-      setTournamentsMap(tMap);
+        const tMap = new Map();
+        for (const t of tournaments) tMap.set(t.id, { name: t.name, date: t.date });
+        setTournamentsMap(tMap);
 
-      const tIds = tournaments.map((t) => t.id);
+        const tIds = tournaments.map((t) => t.id);
 
-      const [{ data: pointsData }, { data: finalMatches }, { data: allPairs }, { data: allPlayers }] = await Promise.all([
-        supabase.from("tournament_player_points").select("*").in("tournament_id", tIds),
-        supabase.from("knockout_matches").select("tournament_id, pair_a_id, pair_b_id, winner_pair_id").in("tournament_id", tIds).eq("phase", "final").not("winner_pair_id", "is", null),
-        supabase.from("knockout_pairs").select("id, tournament_id, player1_id, player2_id").in("tournament_id", tIds),
-        supabase.from("players").select("id, name").in("tournament_id", tIds),
-      ]);
+        const [{ data: pointsData }, { data: finalMatches }, { data: allPairs }, { data: allPlayers }] = await Promise.all([
+          supabase.from("tournament_player_points").select("*").in("tournament_id", tIds),
+          supabase.from("knockout_matches").select("tournament_id, pair_a_id, pair_b_id, winner_pair_id").in("tournament_id", tIds).eq("phase", "final").not("winner_pair_id", "is", null),
+          supabase.from("knockout_pairs").select("id, tournament_id, player1_id, player2_id").in("tournament_id", tIds),
+          supabase.from("players").select("id, name").in("tournament_id", tIds),
+        ]);
 
-      setPointsHistory(pointsData ?? []);
+        setPointsHistory(pointsData ?? []);
 
-      const pairsMap = new Map((allPairs ?? []).map((p) => [p.id, p]));
-      const playersMap = new Map((allPlayers ?? []).map((p) => [p.id, p.name]));
+        const pairsMap = new Map((allPairs ?? []).map((p) => [p.id, p]));
+        const playersMap = new Map((allPlayers ?? []).map((p) => [p.id, p.name]));
 
-      const result: TournamentPodium[] = [];
-      for (const t of tournaments) {
-        const finalMatch = (finalMatches ?? []).find((m) => m.tournament_id === t.id);
-        if (!finalMatch || !finalMatch.winner_pair_id) continue;
+        const result: TournamentPodium[] = [];
+        for (const t of tournaments) {
+          const finalMatch = (finalMatches ?? []).find((m) => m.tournament_id === t.id);
+          if (!finalMatch || !finalMatch.winner_pair_id) continue;
 
-        const champPairId = finalMatch.winner_pair_id;
-        const vicePairId = finalMatch.pair_a_id === champPairId ? finalMatch.pair_b_id : finalMatch.pair_a_id;
-        if (!vicePairId) continue;
+          const champPairId = finalMatch.winner_pair_id;
+          const vicePairId = finalMatch.pair_a_id === champPairId ? finalMatch.pair_b_id : finalMatch.pair_a_id;
+          if (!vicePairId) continue;
 
-        const champPair = pairsMap.get(champPairId);
-        const vicePair = pairsMap.get(vicePairId);
-        if (!champPair || !vicePair) continue;
+          const champPair = pairsMap.get(champPairId);
+          const vicePair = pairsMap.get(vicePairId);
+          if (!champPair || !vicePair) continue;
 
-        result.push({
-          tournamentId: t.id,
-          tournamentName: t.name,
-          tournamentDate: t.date,
-          champion: [
-            playersMap.get(champPair.player1_id) ?? "?",
-            playersMap.get(champPair.player2_id) ?? "?",
-          ],
-          vice: [
-            playersMap.get(vicePair.player1_id) ?? "?",
-            playersMap.get(vicePair.player2_id) ?? "?",
-          ],
-        });
+          result.push({
+            tournamentId: t.id,
+            tournamentName: t.name,
+            tournamentDate: t.date,
+            champion: [
+              playersMap.get(champPair.player1_id) ?? "?",
+              playersMap.get(champPair.player2_id) ?? "?",
+            ],
+            vice: [
+              playersMap.get(vicePair.player1_id) ?? "?",
+              playersMap.get(vicePair.player2_id) ?? "?",
+            ],
+          });
+        }
+        setPodiums(result);
+      } catch (err: unknown) {
+        console.error("Erro em LeagueRanking:", err);
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
       }
-      setPodiums(result);
-      setLoading(false);
     }
     load();
   }, [rankingId]);

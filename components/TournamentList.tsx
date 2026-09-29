@@ -37,30 +37,46 @@ export function TournamentList({ rankingId }: { rankingId: string }) {
   const { isAdmin } = useAuth();
 
   useEffect(() => {
+    if (!rankingId) {
+      setTournaments([]);
+      setLoading(false);
+      return;
+    }
+
     async function load() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("tournaments")
-        .select("*")
-        .eq("ranking_id", rankingId)
-        .order("date", { ascending: false });
+      setError(null);
+      try {
+        const { data, error } = await supabase
+          .from("tournaments")
+          .select("*")
+          .eq("ranking_id", rankingId)
+          .order("date", { ascending: false });
 
-      if (error) { setError(error.message); setLoading(false); return; }
+        if (error) throw error;
 
-      setTournaments(data ?? []);
+        setTournaments(data ?? []);
 
-      if (data && data.length > 0) {
-        const { data: players } = await supabase
-          .from("players")
-          .select("tournament_id")
-          .in("tournament_id", data.map((t) => t.id));
-        const map: Record<string, number> = {};
-        for (const p of players ?? []) {
-          map[p.tournament_id] = (map[p.tournament_id] ?? 0) + 1;
+        if (data && data.length > 0) {
+          const { data: players, error: playersErr } = await supabase
+            .from("players")
+            .select("tournament_id")
+            .in("tournament_id", data.map((t) => t.id));
+
+          if (!playersErr && players) {
+            const map: Record<string, number> = {};
+            for (const p of players) {
+              map[p.tournament_id] = (map[p.tournament_id] ?? 0) + 1;
+            }
+            setCounts(map);
+          }
         }
-        setCounts(map);
+      } catch (e: unknown) {
+        console.error("Erro em TournamentList:", e);
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     load();
   }, [rankingId]);
